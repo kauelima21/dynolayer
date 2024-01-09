@@ -97,6 +97,15 @@ users = User().find().limit(10).fetch()
 products = Product().find().fetch(True)
 ```
 
+### Find By
+Para os casos de consultas com filtro em determinada propriedade que não seja uma chave de partição, pode-se usar o método **find_by**. Para verificar a contagem de itens recebidos ao realizar o fetch (após o *find* ou *find_by*), basta usar a propriedade **count**
+
+```python
+users = User()
+online_users = users.find_by('status', 'online').fetch(True)
+print(f'{users.count} online no momento!')
+```
+
 ### Destroy
 
 Para remover um registro, basta obter a sua chave de partição e executar o método **destroy()** em seguida.
