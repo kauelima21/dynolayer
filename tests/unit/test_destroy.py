@@ -1,6 +1,6 @@
 import boto3
 import pytest
-from src.dynolayer import DynoLayer
+from dynolayer.dynolayer import DynoLayer
 from moto import mock_dynamodb
 
 
