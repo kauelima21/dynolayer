@@ -77,7 +77,7 @@ def test_it_should_find_a_collection_of_records():
     save_record()
     user = User()
     response = user.find().limit(2).fetch()
-    assert len(response) == 2
+    assert user.count == 2
 
 
 @mock_dynamodb
@@ -90,7 +90,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
         {':fn': 'John'},
         {'#fn': 'first_name'}
     ).attributes_to_get('last_name,stars').fetch()
-    assert len(response) == 1
+    assert user.count == 1
     assert 'first_name' not in response[0]
 
 

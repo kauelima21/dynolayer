@@ -18,6 +18,7 @@ class DynoLayer:
         self._timestamps = timestamps
         self._region = region
         self._limit = 50
+        self._count = None
         self._attributes_to_get = None
         self._filter_expression = None
         self._filter_params = None
@@ -117,6 +118,36 @@ class DynoLayer:
 
     """
     Args:
+    attribute (str): The table attribute to filter on.
+    attributes_to_get (str): Attributes to get from table. If it's empty, will bring all attributes.
+
+    Returns:
+    self: The DynoLayer.
+    """
+    def find_by(self, attribute: str, attribute_value, attributes_to_get: str = None):
+        if isinstance(attribute_value, dict) or isinstance(attribute_value, list):
+            attribute_value = json.dumps(attribute_value)
+
+        self._filter_expression = f'#{attribute} = :{attribute}'
+        self._filter_params = {
+            f':{attribute}': attribute_value
+        }
+        self._filter_params_name = {
+            f'#{attribute}': attribute
+        }
+
+        if attributes_to_get:
+            str_attributes_to_get = ''
+            for attr in attributes_to_get.split(','):
+                str_attributes_to_get += f'#{attr},'
+                self._filter_params_name.update({f'#{attr}': attr})
+
+            self._attributes_to_get = str_attributes_to_get[:-1]
+
+        return self
+
+    """
+    Args:
     attributes (str): The specific attributes to return from table.
 
     Returns:
@@ -136,6 +167,14 @@ class DynoLayer:
     def limit(self, limit: int = 50):
         self._limit = limit
         return self
+
+    """
+    Returns:
+    int: The count of records retrived from the table.
+    """
+    @property
+    def count(self) -> int:
+        return self._count
 
     """
     Args:
@@ -161,11 +200,13 @@ class DynoLayer:
 
             response = self._table.scan(**scan_params)
             data = response['Items']
+            self._count = response['Count']
             if paginate_through_results:
                 while 'LastEvaluatedKey' in response:
                     scan_params.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
                     response = self._table.scan(**scan_params)
                     data.extend(response['Items'])
+                    self._count += response['Count']
 
             return data
         except Exception as e:
