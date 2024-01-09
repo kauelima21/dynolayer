@@ -2,11 +2,28 @@
 
 O **DynoLayer** é uma ferramenta poderosa que simplifica e agiliza o acesso e manipulação de dados no Amazon DynamoDB. Baseada no padrão Active Record, esta biblioteca oferece uma abstração intuitiva para interagir com tabelas no DynamoDB, permitindo operações de CRUD (Create, Read, Update, Delete) de forma fácil e natural.
 
+## Instalação
+
+Para usar o pacote basta instalar através do gerenciador de dependências de sua preferência.
+
+```sh
+pip install dynolayer
+```
+
+ou
+
+```sh
+pipenv install dynolayer
+```
+
 ## Exemplos
 
 Para iniciar, primeiro você precisa criar a sua model herdando a classe *DynoLayer*. O nome da tabela e os atributos obrigatórios são os únicos campos requeridos, os demais já possuem um valor padrão.
 
 ```python
+from dynolayer import DynoLayer
+
+
 class User(DynoLayer):
     def __init__(self) -> None:
         super().__init__('users', [])
