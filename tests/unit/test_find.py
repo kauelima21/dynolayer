@@ -94,5 +94,31 @@ def test_it_should_find_a_collection_of_records_by_filter():
     assert 'first_name' not in response[0]
 
 
+@mock_dynamodb
+def test_it_should_paginate():
+    create_table()
+    save_record()
+
+    limit = 1
+    user = User()
+
+    user.find().fetch(True)
+    total_count = user.count
+
+    search = user.find().limit(limit)
+
+    last_evaluated_key = {'id': '123456'}
+    if (last_evaluated_key):
+        search = search.offset(last_evaluated_key)
+
+    results = search.fetch()
+    results_count = user.count
+
+    assert total_count == 3
+    assert results
+    assert results_count == limit
+    assert user.last_evaluated_key != {'id': '123456'}
+
+
 if __name__ == '__main__':
     pytest.main()

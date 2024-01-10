@@ -1,8 +1,10 @@
 import boto3
 import json
 import uuid
+import os
 import pytz
 from datetime import datetime
+from dotenv import load_dotenv
 
 
 class DynoLayer:
@@ -14,17 +16,20 @@ class DynoLayer:
             timestamps: bool = True,
             region='sa-east-1'
         ) -> None:
+        load_dotenv()
         self._entity = entity
         self._required_fields = required_fields
         self._partition_key = partition_key
         self._timestamps = timestamps
         self._region = region
         self._limit = 50
+        self._offset = False
         self._count = None
         self._attributes_to_get = None
         self._filter_expression = None
         self._filter_params = None
         self._filter_params_name = None
+        self._last_evaluated_key = None
         self._error = None
         self._dynamodb = boto3.resource('dynamodb', region_name=self._region)
         self._table = self._dynamodb.Table(self._entity)
@@ -173,11 +178,28 @@ class DynoLayer:
 
     """
     Returns:
-    int: The count of records retrived from the table.
+    int: The count of records retrieved from the table.
     """
     @property
     def count(self) -> int:
         return self._count
+
+    """
+    Returns:
+    bool: Indicate if the operation must paginate in a last_evaluated_key.
+    """
+    def offset(self, last_evaluated_key):
+        self._last_evaluated_key = last_evaluated_key
+        self._offset = True
+        return self
+
+    """
+    Returns:
+    dict: The last record's key retrieved from the table.
+    """
+    @property
+    def last_evaluated_key(self) -> dict:
+        return self._last_evaluated_key
 
     """
     Returns:
@@ -209,15 +231,28 @@ class DynoLayer:
             if self._attributes_to_get:
                 scan_params.update({'ProjectionExpression': self._attributes_to_get})
 
-            response = self._table.scan(**scan_params)
-            data = response['Items']
-            self._count = response['Count']
+            response = None
+            data = []
+            if self._offset:
+                scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
+                response = self._table.scan(**scan_params)
+                data = response['Items']
+                self._count = response['Count']
+            else:
+                response = self._table.scan(**scan_params)
+                data = response['Items']
+                self._count = response['Count']
+
+            if response.get('LastEvaluatedKey', None):
+                self._last_evaluated_key = response['LastEvaluatedKey']
+
             if paginate_through_results:
                 while 'LastEvaluatedKey' in response:
                     scan_params.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
                     response = self._table.scan(**scan_params)
                     data.extend(response['Items'])
                     self._count += response['Count']
+                    self._last_evaluated_key = response['LastEvaluatedKey']
 
             return data
         except Exception as e:
@@ -274,7 +309,8 @@ class DynoLayer:
     """
     def _safe(self):
         if self._timestamps:
-            timezone = pytz.timezone('America/Sao_Paulo')
+            zone = os.environ.get('TIMESTAMP_TIMEZONE') if os.environ.get('TIMESTAMP_TIMEZONE', None) else 'America/Sao_Paulo'
+            timezone = pytz.timezone(zone)
             current_date = datetime.now(timezone)
             if not self._data.get(self._partition_key):
                 self._data['created_at'] = int(current_date.timestamp())

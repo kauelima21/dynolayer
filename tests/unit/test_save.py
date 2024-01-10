@@ -1,5 +1,6 @@
 import boto3
 import pytest
+import os
 from dynolayer.dynolayer import DynoLayer
 from moto import mock_dynamodb
 
@@ -79,6 +80,7 @@ def test_it_should_create_a_record():
         '11 91234-5678',
         '10 95678-1234',
     ]
+    os.environ['TIMESTAMP_TIMEZONE'] = 'US/Pacific'
     assert user.save()
 
 
@@ -97,8 +99,8 @@ def test_it_should_not_create_a_record():
         '11 91234-5678',
         '10 95678-1234',
     ]
-    with pytest.raises(Exception, match='All required fields must be setted'):
-        user.save()
+    assert user.save() == False
+    assert user.error == 'All required fields must be setted'
 
 
 @mock_dynamodb

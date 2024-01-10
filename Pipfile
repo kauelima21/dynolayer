@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 boto3 = "*"
 pytz = "*"
+python-dotenv = "*"
 
 [dev-packages]
 pytest = "*"

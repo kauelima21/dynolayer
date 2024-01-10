@@ -29,6 +29,12 @@ class User(DynoLayer):
         super().__init__('users', [])
 ```
 
+Por padrão, o timezone utilizado é o ```America/Sao_Paulo```. Para alterar isso basta adicionar a variável de ambiente **TIMESTAMP_TIMEZONE** com o valor desejado.
+
+```sh
+TIMESTAMP_TIMEZONE='US/Eastern'
+```
+
 ### Save
 
 Para criar um registro, é preciso instanciar a model e atribuir valor as suas propriedades. Depois basta rodar um **save()** para salvar no banco!
