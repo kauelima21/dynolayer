@@ -18,6 +18,8 @@ pipenv install dynolayer
 
 ## Exemplos
 
+Para mais exemplos, consulte a pasta [docs](https://github.com/kauelima21/dynolayer/tree/main/docs)
+
 Para iniciar, primeiro você precisa criar a sua model herdando a classe *DynoLayer*. O nome da tabela e os atributos obrigatórios são os únicos campos requeridos, os demais já possuem um valor padrão.
 
 ```python
