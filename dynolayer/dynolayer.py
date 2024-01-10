@@ -1,6 +1,8 @@
 import boto3
 import json
 import uuid
+import pytz
+from datetime import datetime
 
 
 class DynoLayer:
@@ -23,6 +25,7 @@ class DynoLayer:
         self._filter_expression = None
         self._filter_params = None
         self._filter_params_name = None
+        self._error = None
         self._dynamodb = boto3.resource('dynamodb', region_name=self._region)
         self._table = self._dynamodb.Table(self._entity)
         self._data = {}
@@ -45,7 +48,8 @@ class DynoLayer:
     """
     def save(self) -> bool:
         if (not self._required()):
-            raise Exception('All required fields must be setted')
+            self._error = 'All required fields must be setted'
+            return False
         # update
         if self._data.get(self._partition_key):
             partition_key = self._data.get(self._partition_key)
@@ -73,28 +77,27 @@ class DynoLayer:
                     ReturnValues='ALL_NEW'
                 )
                 return True
-            except:
+            except Exception as e:
+                self._error = str(e)
                 return False
 
         # create
-        if not self._data.get(self._partition_key):
-            try:
-                data = {}
-                data[self._partition_key] = str(uuid.uuid4())
+        try:
+            data = {}
+            data[self._partition_key] = str(uuid.uuid4())
 
-                for key, value in self._safe():
-                    if isinstance(value, dict) or isinstance(value, list):
-                        value = json.dumps(value)
-                    data[key] = value
+            for key, value in self._safe():
+                if isinstance(value, dict) or isinstance(value, list):
+                    value = json.dumps(value)
+                data[key] = value
 
-                self._table.put_item(
-                    Item=data
-                )
-                return True
-            except:
-                return False
-
-        return False
+            self._table.put_item(
+                Item=data
+            )
+            return True
+        except:
+            self._error = str(e)
+            return False
 
     """
     Args:
@@ -177,6 +180,14 @@ class DynoLayer:
         return self._count
 
     """
+    Returns:
+    str: Return the error occurred during an operation.
+    """
+    @property
+    def error(self) -> str:
+        return self._error
+
+    """
     Args:
     paginate_through_results (bool): Indicate if the result should be paginated.
 
@@ -210,7 +221,8 @@ class DynoLayer:
 
             return data
         except Exception as e:
-            raise e
+            self._error = str(e)
+            return None
 
     """
     Args:
@@ -220,15 +232,19 @@ class DynoLayer:
     self: The founded record as DynoLayer.
     """
     def find_by_id(self, partition_key: str):
-        response = self._table.get_item(
-            TableName=self._entity,
-            Key={
-                self._partition_key: partition_key
-            }
-        )
-        for key, value in response['Item'].items():
-            setattr(self, key, value)
-        return self
+        try:
+            response = self._table.get_item(
+                TableName=self._entity,
+                Key={
+                    self._partition_key: partition_key
+                }
+            )
+            for key, value in response['Item'].items():
+                setattr(self, key, value)
+            return self
+        except Exception as e:
+            self._error = str(e)
+            return None
 
     """
     Returns:
@@ -240,19 +256,30 @@ class DynoLayer:
         if not partition_key:
             return False
 
-        self._table.delete_item(
-            TableName=self._entity,
-            Key={
-                self._partition_key: partition_key
-            }
-        )
-        return True
+        try:
+            self._table.delete_item(
+                TableName=self._entity,
+                Key={
+                    self._partition_key: partition_key
+                }
+            )
+            return True
+        except Exception as e:
+            self._error = str(e)
+            return False
 
     """
     Returns:
     dict_items: The _data items without the partition key.
     """
     def _safe(self):
+        if self._timestamps:
+            timezone = pytz.timezone('America/Sao_Paulo')
+            current_date = datetime.now(timezone)
+            if not self._data.get(self._partition_key):
+                self._data['created_at'] = int(current_date.timestamp())
+            self._data['updated_at'] = int(current_date.timestamp())
+
         safe = list(self._data.items())
         for item in safe:
             if self._partition_key in item:
@@ -273,5 +300,5 @@ class DynoLayer:
                 required = False
             else:
                 required = True
-            break
+                break
         return required
