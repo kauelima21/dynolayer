@@ -99,7 +99,7 @@ def test_it_should_not_create_a_record():
         '11 91234-5678',
         '10 95678-1234',
     ]
-    assert user.save() == False
+    assert not user.save()
     assert user.error == 'All required fields must be setted'
 
 

@@ -62,6 +62,7 @@ class User(DynoLayer):
     def __init__(self) -> None:
         super().__init__('users', [])
 
+
 @mock_dynamodb
 def test_it_should_destroy_a_record():
     create_table()

@@ -114,6 +114,24 @@ online_users = users.find_by('status', 'online').fetch(True)
 print(f'{users.count} online no momento!')
 ```
 
+### Query By
+Para os casos de consultas com filtro em determinada chave de partição, pode-se usar o método **query_by**.
+
+```python
+users = User()
+online_users = users.query_by('status', 'online').fetch(True)
+print(f'{users.count} online no momento!')
+```
+
+### Order
+Serve para ordenar de acordo com determinado atributo, podendo também trazer a resposta de form crescente ou decrescente, a depender do valor que for passado no segundo argumento que por padrão é True e retorna de maneira crescente.
+
+```python
+users = User()
+online_users = users.find_by('status', 'online').order('first_name').fetch(True)
+print(f'{users.count} online no momento!')
+```
+
 ### Destroy
 
 Para remover um registro, basta obter a sua chave de partição e executar o método **destroy()** em seguida.

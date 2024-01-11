@@ -62,6 +62,7 @@ class User(DynoLayer):
     def __init__(self) -> None:
         super().__init__('users', [])
 
+
 @mock_dynamodb
 def test_it_should_find_a_record_by_id():
     create_table()
@@ -85,13 +86,38 @@ def test_it_should_find_a_collection_of_records_by_filter():
     create_table()
     save_record()
     user = User()
+    # adicionar propriedade com nome reservado pelo DynamoDB
+    user.id = '123456'
+    user.name = 'Messi'
+    user.save()
+
     response = user.find(
         '#fn = :fn',
         {':fn': 'John'},
-        {'#fn': 'first_name'}
-    ).attributes_to_get('last_name,stars').fetch()
+        {'#fn': 'first_name', '#name': 'name'}
+    ).attributes_to_get('last_name,stars,#name').fetch()
     assert user.count == 1
     assert 'first_name' not in response[0]
+    assert response[0].get('last_name', None)
+    assert response[0].get('stars', None)
+
+    response_find_by = user.find_by(
+        'first_name',
+        'John'
+    ).attributes_to_get('last_name,stars,name').fetch()
+    assert user.count == 1
+    assert 'first_name' not in response_find_by[0]
+    assert response_find_by[0].get('last_name', None)
+    assert response_find_by[0].get('stars', None)
+
+    response_query_by = user.query_by(
+        'id',
+        '123456'
+    ).attributes_to_get('last_name,stars,name').fetch()
+    assert user.count == 1
+    assert 'first_name' not in response_query_by[0]
+    assert response_query_by[0].get('last_name', None)
+    assert response_query_by[0].get('stars', None)
 
 
 @mock_dynamodb
@@ -108,7 +134,7 @@ def test_it_should_paginate():
     search = user.find().limit(limit)
 
     last_evaluated_key = {'id': '123456'}
-    if (last_evaluated_key):
+    if last_evaluated_key:
         search = search.offset(last_evaluated_key)
 
     results = search.fetch()
@@ -118,6 +144,20 @@ def test_it_should_paginate():
     assert results
     assert results_count == limit
     assert user.last_evaluated_key != {'id': '123456'}
+
+
+@mock_dynamodb
+def test_it_should_fetch_records_ordered():
+    create_table()
+    save_record()
+    user = User()
+    response_ascending = user.find().order('first_name').fetch()
+    assert response_ascending[0].get('first_name', None) == 'Anna'
+    assert response_ascending[2].get('first_name', None) == 'John'
+    response_descending = user.find().order('first_name', False).fetch()
+    assert response_descending[0].get('first_name', None) == 'John'
+    assert response_descending[2].get('first_name', None) == 'Anna'
+
 
 
 if __name__ == '__main__':
