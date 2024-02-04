@@ -316,6 +316,7 @@ class DynoLayer:
             self._table.put_item(
                 Item=data
             )
+            self.id = self._partition_key
             return True
         except Exception as e:
             self._error = str(e)
