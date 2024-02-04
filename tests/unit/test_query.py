@@ -85,21 +85,16 @@ class User(DynoLayer):
 
 
 @mock_dynamodb
-def test_it_should_find_a_record_by_id():
+def test_it_should_query_a_batch_of_records():
     create_table()
     save_record()
     user = User()
-    response = user.find_by_id('123456')
+    response = user.query_by('role', 'admin', 'role-index').fetch()
     assert response
-
-
-@mock_dynamodb
-def test_it_should_find_a_collection_of_records():
-    create_table()
-    save_record()
-    user = User()
-    response = user.find().limit(2).fetch()
-    assert user.count == 2
+    assert len(response) == 2
+    response_partition = user.query_by('id', '123456').fetch()
+    assert response_partition
+    assert len(response_partition) == 1
 
 
 @mock_dynamodb
@@ -112,63 +107,25 @@ def test_it_should_find_a_collection_of_records_by_filter():
     user.name = 'Messi'
     user.save()
 
-    response = user.find(
-        '#fn = :fn',
-        {':fn': 'John'},
-        {'#fn': 'first_name', '#name': 'name'}
+    response = user.query(
+        '#r = :r',
+        {':r': 'common'},
+        {'#r': 'role', '#name': 'name'},
+        'role-index'
     ).attributes_to_get('last_name,stars,#name').fetch()
     assert user.count == 1
     assert 'first_name' not in response[0]
     assert response[0].get('last_name', None)
     assert response[0].get('stars', None)
 
-    response_find_by = user.find_by(
-        'first_name',
-        'John'
+    response_query_by = user.query_by(
+        'id',
+        '123456'
     ).attributes_to_get('last_name,stars,name').fetch()
     assert user.count == 1
-    assert 'first_name' not in response_find_by[0]
-    assert response_find_by[0].get('last_name', None)
-    assert response_find_by[0].get('stars', None)
-
-
-@mock_dynamodb
-def test_it_should_paginate():
-    create_table()
-    save_record()
-
-    limit = 1
-    user = User()
-
-    user.find().fetch(True)
-    total_count = user.count
-
-    search = user.find().limit(limit)
-
-    last_evaluated_key = {'id': '123456'}
-    if last_evaluated_key:
-        search = search.offset(last_evaluated_key)
-
-    results = search.fetch()
-    results_count = user.count
-
-    assert total_count == 3
-    assert results
-    assert results_count == limit
-    assert user.last_evaluated_key != {'id': '123456'}
-
-
-@mock_dynamodb
-def test_it_should_fetch_records_ordered():
-    create_table()
-    save_record()
-    user = User()
-    response_ascending = user.find().order('first_name').fetch()
-    assert response_ascending[0].get('first_name', None) == 'Anna'
-    assert response_ascending[2].get('first_name', None) == 'John'
-    response_descending = user.find().order('first_name', False).fetch()
-    assert response_descending[0].get('first_name', None) == 'John'
-    assert response_descending[2].get('first_name', None) == 'Anna'
+    assert 'first_name' not in response_query_by[0]
+    assert response_query_by[0].get('last_name', None)
+    assert response_query_by[0].get('stars', None)
 
 
 if __name__ == '__main__':

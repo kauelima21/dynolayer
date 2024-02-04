@@ -26,6 +26,7 @@ class DynoLayer:
         self._offset = False
         self._order_by = None
         self._count = None
+        self._secondary_index = None
         self._attributes_to_get = None
         self._filter_expression = None
         self._filter_params = None
@@ -59,8 +60,9 @@ class DynoLayer:
     self: The DynoLayer.
     """
 
-    def query_by(self, key: str, key_value):
+    def query_by(self, key: str, key_value, secondary_index=None):
         self._is_query_operation = True
+        self._secondary_index = secondary_index
         return self.find_by(key, key_value)
 
     """
@@ -78,10 +80,23 @@ class DynoLayer:
             filter_params: dict = None,
             filter_params_name: dict = None
     ):
-        if filter_expression:
-            self._filter_expression = filter_expression
-            self._filter_params = filter_params
-            self._filter_params_name = filter_params_name
+        self._filter_expression = filter_expression
+        self._filter_params = filter_params
+        self._filter_params_name = filter_params_name
+        return self
+
+    def query(
+            self,
+            filter_expression: str,
+            filter_params: dict,
+            filter_params_name: dict,
+            index_or_partition_key
+    ):
+        self._is_query_operation = True
+        self._secondary_index = index_or_partition_key
+        self._filter_expression = filter_expression
+        self._filter_params = filter_params
+        self._filter_params_name = filter_params_name
         return self
 
     """
@@ -196,6 +211,9 @@ class DynoLayer:
 
             if self._attributes_to_get:
                 scan_params.update({'ProjectionExpression': self._attributes_to_get})
+
+            if self._secondary_index:
+                scan_params.update({'IndexName': self._secondary_index})
 
             if self._is_query_operation:
                 return self._order_response(self._fetch_query(scan_params, paginate_through_results))
