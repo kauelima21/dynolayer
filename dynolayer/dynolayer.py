@@ -13,15 +13,13 @@ class DynoLayer:
             entity: str,
             required_fields: list,
             partition_key: str = 'id',
-            timestamps: bool = True,
-            region='sa-east-1'
+            timestamps: bool = True
     ) -> None:
         load_dotenv()
         self._entity = entity
         self._required_fields = required_fields
         self._partition_key = partition_key
         self._timestamps = timestamps
-        self._region = region
         self._limit = 50
         self._offset = False
         self._order_by = None
@@ -35,7 +33,8 @@ class DynoLayer:
         self._error = None
         self._is_find_by = False
         self._is_query_operation = False
-        self._dynamodb = self.__load_dynamo()
+        self._region = 'sa-east-1'
+        self._dynamodb = self._load_dynamo()
         self._table = self._dynamodb.Table(self._entity)
         self._data = {}
 
@@ -51,10 +50,19 @@ class DynoLayer:
         else:
             return object.__getattribute__(self, name)
 
-    def __load_dynamo(self):
+    # Chamado apenas pelas classes filhas do DynoLayer
+    def _transform_into_layer(self, item: dict):
+        new_item = DynoLayer(self._entity, self._required_fields, self._partition_key, self._timestamps)
+        for key, value in item.items():
+            setattr(new_item, key, value)
+        return new_item
+
+    def _load_dynamo(self):
         endpoint_url = None
         if os.environ.get('LOCAL_ENDPOINT'):
             endpoint_url = os.environ.get('LOCAL_ENDPOINT')
+        if os.environ.get('REGION'):
+            self._region = os.environ.get('REGION')
         return boto3.resource(
             'dynamodb',
             region_name=self._region,
@@ -387,6 +395,7 @@ class DynoLayer:
     def _fetch_scan(self, scan_params: dict, paginate_through_results: bool):
         response = None
         data = []
+
         if self._offset:
             scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
             response = self._table.scan(**scan_params)
@@ -413,6 +422,7 @@ class DynoLayer:
     def _fetch_query(self, scan_params: dict, paginate_through_results: bool):
         response = None
         data = []
+
         if self._offset:
             scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
             response = self._table.query(**scan_params)
@@ -436,6 +446,9 @@ class DynoLayer:
 
         return data
 
+    def data(self):
+        return self._data
+
     """
     Args:
     response (list): The response to order.
@@ -445,10 +458,18 @@ class DynoLayer:
     """
 
     def _order_response(self, response):
-        if self._order_by and len(response) > 0:
-            return sorted(
+        if len(response) == 0:
+            return response
+
+        if self._order_by:
+            response = sorted(
                 response,
                 key=lambda d: d[self._order_by.get('attribute')],
                 reverse=not self._order_by.get('is_ascending')
             )
-        return response
+
+        transformed_response = []
+        for item in response:
+            transformed_response.append(self._transform_into_layer(item))
+
+        return transformed_response

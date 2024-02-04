@@ -1,6 +1,7 @@
 .idea
 .DS_Store
 .pytest_cache
+.venv
 dynolayer/__pycache__
 tests/__pycache__
 dynolayer/**/__pycache__

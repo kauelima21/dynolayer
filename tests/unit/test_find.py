@@ -1,7 +1,7 @@
 import boto3
 import pytest
 from dynolayer.dynolayer import DynoLayer
-from moto import mock_dynamodb
+from moto import mock_aws
 
 
 def create_table():
@@ -84,25 +84,28 @@ class User(DynoLayer):
         super().__init__('users', [])
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_find_a_record_by_id():
     create_table()
     save_record()
     user = User()
     response = user.find_by_id('123456')
+    data = response.data()
     assert response
+    assert data.get('id') == '123456'
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_find_a_collection_of_records():
     create_table()
     save_record()
     user = User()
     response = user.find().limit(2).fetch()
     assert user.count == 2
+    assert response
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_find_a_collection_of_records_by_filter():
     create_table()
     save_record()
@@ -132,7 +135,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
     assert response_find_by[0].get('stars', None)
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_paginate():
     create_table()
     save_record()
@@ -158,7 +161,7 @@ def test_it_should_paginate():
     assert user.last_evaluated_key != {'id': '123456'}
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_fetch_records_ordered():
     create_table()
     save_record()

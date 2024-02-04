@@ -1,7 +1,7 @@
 import boto3
 import pytest
 from dynolayer.dynolayer import DynoLayer
-from moto import mock_dynamodb
+from moto import mock_aws
 
 
 def create_table():
@@ -63,7 +63,7 @@ class User(DynoLayer):
         super().__init__('users', [])
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_destroy_a_record():
     create_table()
     save_record()

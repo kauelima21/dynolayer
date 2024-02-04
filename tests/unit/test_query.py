@@ -1,7 +1,7 @@
 import boto3
 import pytest
 from dynolayer.dynolayer import DynoLayer
-from moto import mock_dynamodb
+from moto import mock_aws
 
 
 def create_table():
@@ -84,7 +84,7 @@ class User(DynoLayer):
         super().__init__('users', [])
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_query_a_batch_of_records():
     create_table()
     save_record()
@@ -97,7 +97,7 @@ def test_it_should_query_a_batch_of_records():
     assert len(response_partition) == 1
 
 
-@mock_dynamodb
+@mock_aws
 def test_it_should_find_a_collection_of_records_by_filter():
     create_table()
     save_record()
