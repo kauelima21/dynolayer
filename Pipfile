@@ -11,6 +11,7 @@ python-dotenv = "*"
 [dev-packages]
 pytest = "*"
 moto = "*"
+twine = "*"
 
 [requires]
 python_version = "3.8"

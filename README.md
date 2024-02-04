@@ -37,6 +37,13 @@ Por padrão, o timezone utilizado é o ```America/Sao_Paulo```. Para alterar iss
 TIMESTAMP_TIMEZONE='US/Eastern'
 ```
 
+O mesmo se aplica para a região e para o uso local do dynamodb. Caso as variáveis abaixo não existam, os valores padrão serão **sa-east-1** e o dynamodb da da aws na região utilizada.
+
+```sh
+REGION='us-east-1'
+LOCAL_ENDPOINT='http://localhost:8000'
+```
+
 ### Save
 
 Para criar um registro, é preciso instanciar a model e atribuir valor as suas propriedades. Depois basta rodar um **save()** para salvar no banco!

@@ -35,7 +35,7 @@ class DynoLayer:
         self._error = None
         self._is_find_by = False
         self._is_query_operation = False
-        self._dynamodb = boto3.resource('dynamodb', region_name=self._region)
+        self._dynamodb = self.__load_dynamo()
         self._table = self._dynamodb.Table(self._entity)
         self._data = {}
 
@@ -50,6 +50,16 @@ class DynoLayer:
             return self._data.get(name)
         else:
             return object.__getattribute__(self, name)
+
+    def __load_dynamo(self):
+        endpoint_url = None
+        if os.environ.get('LOCAL_ENDPOINT'):
+            endpoint_url = os.environ.get('LOCAL_ENDPOINT')
+        return boto3.resource(
+            'dynamodb',
+            region_name=self._region,
+            endpoint_url=endpoint_url
+        )
 
     """
     Args:
