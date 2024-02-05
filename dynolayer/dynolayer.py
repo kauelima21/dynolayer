@@ -52,7 +52,10 @@ class DynoLayer:
 
     # Chamado apenas pelas classes filhas do DynoLayer
     def _transform_into_layer(self, item: dict):
-        new_item = DynoLayer(self._entity, self._required_fields, self._partition_key, self._timestamps)
+        cls = self.__class__
+        new_item = cls.__new__(cls)
+        new_item.__dict__ = self.__dict__.copy()
+        new_item._data = {}  # limpa os antigos atributos
         for key, value in item.items():
             setattr(new_item, key, value)
         return new_item

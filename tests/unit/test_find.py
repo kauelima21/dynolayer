@@ -121,18 +121,18 @@ def test_it_should_find_a_collection_of_records_by_filter():
         {'#fn': 'first_name', '#name': 'name'}
     ).attributes_to_get('last_name,stars,#name').fetch()
     assert user.count == 1
-    assert 'first_name' not in response[0]
-    assert response[0].get('last_name', None)
-    assert response[0].get('stars', None)
+    assert 'first_name' not in response[0].data()
+    assert response[0].data().get('last_name', None)
+    assert response[0].data().get('stars', None)
 
     response_find_by = user.find_by(
         'first_name',
         'John'
     ).attributes_to_get('last_name,stars,name').fetch()
     assert user.count == 1
-    assert 'first_name' not in response_find_by[0]
-    assert response_find_by[0].get('last_name', None)
-    assert response_find_by[0].get('stars', None)
+    assert 'first_name' not in response_find_by[0].data()
+    assert response_find_by[0].data().get('last_name', None)
+    assert response_find_by[0].data().get('stars', None)
 
 
 @mock_aws
@@ -167,11 +167,11 @@ def test_it_should_fetch_records_ordered():
     save_record()
     user = User()
     response_ascending = user.find().order('first_name').fetch()
-    assert response_ascending[0].get('first_name', None) == 'Anna'
-    assert response_ascending[2].get('first_name', None) == 'John'
+    assert response_ascending[0].data().get('first_name', None) == 'Anna'
+    assert response_ascending[2].data().get('first_name', None) == 'John'
     response_descending = user.find().order('first_name', False).fetch()
-    assert response_descending[0].get('first_name', None) == 'John'
-    assert response_descending[2].get('first_name', None) == 'Anna'
+    assert response_descending[0].data().get('first_name', None) == 'John'
+    assert response_descending[2].data().get('first_name', None) == 'Anna'
 
 
 if __name__ == '__main__':

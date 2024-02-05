@@ -114,18 +114,18 @@ def test_it_should_find_a_collection_of_records_by_filter():
         'role-index'
     ).attributes_to_get('last_name,stars,#name').fetch()
     assert user.count == 1
-    assert 'first_name' not in response[0]
-    assert response[0].get('last_name', None)
-    assert response[0].get('stars', None)
+    assert 'first_name' not in response[0].data()
+    assert response[0].data().get('last_name', None)
+    assert response[0].data().get('stars', None)
 
     response_query_by = user.query_by(
         'id',
         '123456'
     ).attributes_to_get('last_name,stars,name').fetch()
     assert user.count == 1
-    assert 'first_name' not in response_query_by[0]
-    assert response_query_by[0].get('last_name', None)
-    assert response_query_by[0].get('stars', None)
+    assert 'first_name' not in response_query_by[0].data()
+    assert response_query_by[0].data().get('last_name', None)
+    assert response_query_by[0].data().get('stars', None)
 
 
 if __name__ == '__main__':
