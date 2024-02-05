@@ -82,6 +82,7 @@ def test_it_should_create_a_record():
     ]
     os.environ['TIMESTAMP_TIMEZONE'] = 'US/Pacific'
     assert user.save()
+    assert user.id
 
 
 @mock_aws
