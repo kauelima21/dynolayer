@@ -101,7 +101,7 @@ def test_it_should_find_a_collection_of_records():
     save_record()
     user = User()
     response = user.find().limit(2).fetch()
-    assert user.count == 2
+    assert user.get_count == 2
     assert response
 
 
@@ -120,7 +120,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
         {':fn': 'John'},
         {'#fn': 'first_name', '#name': 'name'}
     ).attributes_to_get('last_name,stars,#name').fetch()
-    assert user.count == 1
+    assert user.get_count == 1
     assert 'first_name' not in response[0].data()
     assert response[0].data().get('last_name', None)
     assert response[0].data().get('stars', None)
@@ -129,7 +129,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
         'first_name',
         'John'
     ).attributes_to_get('last_name,stars,name').fetch()
-    assert user.count == 1
+    assert user.get_count == 1
     assert 'first_name' not in response_find_by[0].data()
     assert response_find_by[0].data().get('last_name', None)
     assert response_find_by[0].data().get('stars', None)
@@ -144,7 +144,7 @@ def test_it_should_paginate():
     user = User()
 
     user.find().fetch(True)
-    total_count = user.count
+    total_count = user.get_count
 
     search = user.find().limit(limit)
 
@@ -153,7 +153,7 @@ def test_it_should_paginate():
         search = search.offset(last_evaluated_key)
 
     results = search.fetch()
-    results_count = user.count
+    results_count = user.get_count
 
     assert total_count == 3
     assert results
@@ -172,6 +172,15 @@ def test_it_should_fetch_records_ordered():
     response_descending = user.find().order('first_name', False).fetch()
     assert response_descending[0].data().get('first_name', None) == 'John'
     assert response_descending[2].data().get('first_name', None) == 'Anna'
+
+
+@mock_aws
+def test_it_should_return_the_items_count():
+    create_table()
+    save_record()
+    user = User()
+    total_count = user.find().count()
+    assert total_count == 3
 
 
 if __name__ == '__main__':

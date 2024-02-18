@@ -113,12 +113,12 @@ products = Product().find().fetch(True)
 ```
 
 ### Find By
-Para os casos de consultas com filtro em determinada propriedade que não seja uma chave de partição, pode-se usar o método **find_by**. Para verificar a contagem de itens recebidos ao realizar o fetch (após o *find* ou *find_by*), basta usar a propriedade **count**
+Para os casos de consultas com filtro em determinada propriedade que não seja uma chave de partição, pode-se usar o método **find_by**. Para verificar a contagem de itens recebidos ao realizar o fetch (após o *find* ou *find_by*), basta usar a propriedade **get_count**
 
 ```python
 users = User()
 online_users = users.find_by('status', 'online').fetch(True)
-print(f'{users.count} online no momento!')
+print(f'{users.get_count} online no momento!')
 ```
 
 ### Query By
@@ -127,7 +127,7 @@ Para os casos de consultas com filtro em determinada chave de partição, pode-s
 ```python
 users = User()
 online_users = users.query_by('status', 'online').fetch(True)
-print(f'{users.count} online no momento!')
+print(f'{users.get_count} online no momento!')
 ```
 
 ### Order
@@ -136,7 +136,16 @@ Serve para ordenar de acordo com determinado atributo, podendo também trazer a 
 ```python
 users = User()
 online_users = users.find_by('status', 'online').order('first_name').fetch(True)
-print(f'{users.count} online no momento!')
+print(f'{users.get_count} online no momento!')
+```
+
+### Count
+Caso queira contar o total de itens na tabela ou operação que você fizer sem retornar os dados registrados nela, basta substituir o método **fetch()** por **count()**
+
+```python
+users = User()
+online_users = users.find_by('status', 'online').order('first_name').count()
+print(f'{online_users} online no momento!')
 ```
 
 ### Destroy

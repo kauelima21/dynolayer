@@ -8,8 +8,7 @@ Exemplo:
 limit = 50
 user = User()
 
-user.find().fetch(True) # recupera todos os itens da tabela.
-total_count = user.count
+total_count = user.find().count() # recupera todos os itens da tabela.
 
 search = user.find().limit(limit) # consulta a ser realizada
 
@@ -19,7 +18,7 @@ if (last_evaluated_key):
     search = search.offset(last_evaluated_key)
 
 results = search.fetch()
-results_count = user.count
+results_count = user.get_count
 
 api_response = {
     'total_count': total_count, # total de itens na tabela

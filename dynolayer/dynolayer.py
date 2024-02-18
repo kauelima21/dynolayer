@@ -33,6 +33,7 @@ class DynoLayer:
         self._error = None
         self._is_find_by = False
         self._is_query_operation = False
+        self._just_count = False
         self._region = 'sa-east-1'
         self._dynamodb = self._load_dynamo()
         self._table = self._dynamodb.Table(self._entity)
@@ -179,11 +180,20 @@ class DynoLayer:
 
     """
     Returns:
-    int: The count of records retrieved from the table.
+    int: The count of records retrieved from the table after an operation.
     """
 
     @property
-    def count(self) -> int:
+    def get_count(self) -> int:
+        return self._count
+
+    """
+    Returns:
+    int: The total count of records in the table.
+    """
+
+    def count(self):
+        self._fetch(just_count=True)
         return self._count
 
     """
@@ -218,11 +228,17 @@ class DynoLayer:
     """
 
     def fetch(self, paginate_through_results: bool = False):
+        return self._fetch(paginate_through_results)
+
+    def _fetch(self, paginate_through_results: bool = False, just_count=False):
         try:
             scan_params = {
                 'TableName': self._entity,
                 'Limit': self._limit,
             }
+
+            if just_count:
+                scan_params.update({'Select': 'COUNT'})
 
             if self._filter_expression:
                 filter_key = 'KeyConditionExpression' if self._is_query_operation else 'FilterExpression'
@@ -403,11 +419,11 @@ class DynoLayer:
         if self._offset:
             scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
             response = self._table.scan(**scan_params)
-            data = response['Items']
+            data = response.get('Items', None)
             self._count = response['Count']
         else:
             response = self._table.scan(**scan_params)
-            data = response['Items']
+            data = response.get('Items', None)
             self._count = response['Count']
 
         if response.get('LastEvaluatedKey', None):
@@ -417,7 +433,7 @@ class DynoLayer:
             while 'LastEvaluatedKey' in response:
                 scan_params.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
                 response = self._table.scan(**scan_params)
-                data.extend(response['Items'])
+                data.extend(response.get('Items', None))
                 self._count += response['Count']
                 self._last_evaluated_key = response['LastEvaluatedKey']
 
@@ -430,11 +446,11 @@ class DynoLayer:
         if self._offset:
             scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
             response = self._table.query(**scan_params)
-            data = response['Items']
+            data = response.get('Items', None)
             self._count = response['Count']
         else:
             response = self._table.query(**scan_params)
-            data = response['Items']
+            data = response.get('Items', None)
             self._count = response['Count']
 
         if response.get('LastEvaluatedKey', None):
@@ -444,7 +460,7 @@ class DynoLayer:
             while 'LastEvaluatedKey' in response:
                 scan_params.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
                 response = self._table.query(**scan_params)
-                data.extend(response['Items'])
+                data.extend(response.get('Items', None))
                 self._count += response['Count']
                 self._last_evaluated_key = response['LastEvaluatedKey']
 

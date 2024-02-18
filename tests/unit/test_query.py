@@ -113,7 +113,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
         {'#r': 'role', '#name': 'name'},
         'role-index'
     ).attributes_to_get('last_name,stars,#name').fetch()
-    assert user.count == 1
+    assert user.get_count == 1
     assert 'first_name' not in response[0].data()
     assert response[0].data().get('last_name', None)
     assert response[0].data().get('stars', None)
@@ -122,10 +122,19 @@ def test_it_should_find_a_collection_of_records_by_filter():
         'id',
         '123456'
     ).attributes_to_get('last_name,stars,name').fetch()
-    assert user.count == 1
+    assert user.get_count == 1
     assert 'first_name' not in response_query_by[0].data()
     assert response_query_by[0].data().get('last_name', None)
     assert response_query_by[0].data().get('stars', None)
+
+
+@mock_aws
+def test_it_should_return_the_items_count():
+    create_table()
+    save_record()
+    user = User()
+    total_count = user.query_by('role', 'admin', 'role-index').count()
+    assert total_count == 2
 
 
 if __name__ == '__main__':
