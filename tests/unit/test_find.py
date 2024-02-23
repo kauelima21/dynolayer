@@ -100,7 +100,7 @@ def test_it_should_find_a_collection_of_records():
     create_table()
     save_record()
     user = User()
-    response = user.find().limit(2).fetch(object=True)
+    response = user.find().limit(2).fetch()
     assert user.get_count == 2
     assert response
 

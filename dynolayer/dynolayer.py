@@ -5,6 +5,7 @@ import os
 import pytz
 from datetime import datetime
 from dotenv import load_dotenv
+from decimal import Decimal
 
 
 class DynoLayer:
@@ -487,6 +488,11 @@ class DynoLayer:
                 key=lambda d: d[self._order_by.get('attribute')],
                 reverse=not self._order_by.get('is_ascending')
             )
+
+        for item in response:
+            for key, value in item.items():
+                if isinstance(value, Decimal):
+                    item[key] = int(value)
 
         transformed_response = []
         if object:
