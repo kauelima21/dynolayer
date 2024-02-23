@@ -148,6 +148,14 @@ online_users = users.find_by('status', 'online').order('first_name').count()
 print(f'{online_users} online no momento!')
 ```
 
+### Fetch
+Por default retorna os dados como um dict, mas ao passar o argumento object como True ele retorna os registros como um objeto DynoLayer.
+
+```python
+users = User().find_by('status', 'online').order('first_name').fetch(object=True)
+print(users[0].name)
+```
+
 ### Destroy
 
 Para remover um registro, basta obter a sua chave de partição e executar o método **destroy()** em seguida.

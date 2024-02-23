@@ -89,10 +89,10 @@ def test_it_should_query_a_batch_of_records():
     create_table()
     save_record()
     user = User()
-    response = user.query_by('role', 'admin', 'role-index').fetch()
+    response = user.query_by('role', 'admin', 'role-index').fetch(object=True)
     assert response
     assert len(response) == 2
-    response_partition = user.query_by('id', '123456').fetch()
+    response_partition = user.query_by('id', '123456').fetch(object=True)
     assert response_partition
     assert len(response_partition) == 1
 
@@ -112,7 +112,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
         {':r': 'common'},
         {'#r': 'role', '#name': 'name'},
         'role-index'
-    ).attributes_to_get('last_name,stars,#name').fetch()
+    ).attributes_to_get('last_name,stars,#name').fetch(object=True)
     assert user.get_count == 1
     assert 'first_name' not in response[0].data()
     assert response[0].data().get('last_name', None)
@@ -121,7 +121,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
     response_query_by = user.query_by(
         'id',
         '123456'
-    ).attributes_to_get('last_name,stars,name').fetch()
+    ).attributes_to_get('last_name,stars,name').fetch(object=True)
     assert user.get_count == 1
     assert 'first_name' not in response_query_by[0].data()
     assert response_query_by[0].data().get('last_name', None)

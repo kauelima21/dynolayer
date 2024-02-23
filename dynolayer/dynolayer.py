@@ -227,10 +227,10 @@ class DynoLayer:
     list: The record collection from table.
     """
 
-    def fetch(self, paginate_through_results: bool = False):
-        return self._fetch(paginate_through_results)
+    def fetch(self, paginate_through_results: bool = False, object=False):
+        return self._fetch(paginate_through_results, object=object)
 
-    def _fetch(self, paginate_through_results: bool = False, just_count=False):
+    def _fetch(self, paginate_through_results: bool = False, just_count=False, object=False):
         try:
             scan_params = {
                 'TableName': self._entity,
@@ -253,9 +253,9 @@ class DynoLayer:
                 scan_params.update({'IndexName': self._secondary_index})
 
             if self._is_query_operation:
-                return self._order_response(self._fetch_query(scan_params, paginate_through_results))
+                return self._order_response(self._fetch_query(scan_params, paginate_through_results), object=object)
 
-            return self._order_response(self._fetch_scan(scan_params, paginate_through_results))
+            return self._order_response(self._fetch_scan(scan_params, paginate_through_results), object=object)
         except Exception as e:
             self._error = str(e)
             return None
@@ -477,7 +477,7 @@ class DynoLayer:
     list: The ordered filtered or not.
     """
 
-    def _order_response(self, response):
+    def _order_response(self, response, object=False):
         if len(response) == 0:
             return response
 
@@ -489,7 +489,8 @@ class DynoLayer:
             )
 
         transformed_response = []
-        for item in response:
-            transformed_response.append(self._transform_into_layer(item))
+        if object:
+            for item in response:
+                transformed_response.append(self._transform_into_layer(item))
 
         return transformed_response

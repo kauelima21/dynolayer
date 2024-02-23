@@ -7,7 +7,7 @@ with open('README.md', 'r') as file:
 
 setup(
     name='dynolayer',
-    version='0.3.0',
+    version='0.3.1',
     license='MIT License',
     packages=['dynolayer'],
     install_requires=['boto3', 'pytz', 'python-dotenv'],

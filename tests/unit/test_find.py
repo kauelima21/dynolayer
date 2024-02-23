@@ -100,7 +100,7 @@ def test_it_should_find_a_collection_of_records():
     create_table()
     save_record()
     user = User()
-    response = user.find().limit(2).fetch()
+    response = user.find().limit(2).fetch(object=True)
     assert user.get_count == 2
     assert response
 
@@ -119,7 +119,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
         '#fn = :fn',
         {':fn': 'John'},
         {'#fn': 'first_name', '#name': 'name'}
-    ).attributes_to_get('last_name,stars,#name').fetch()
+    ).attributes_to_get('last_name,stars,#name').fetch(object=True)
     assert user.get_count == 1
     assert 'first_name' not in response[0].data()
     assert response[0].data().get('last_name', None)
@@ -128,7 +128,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
     response_find_by = user.find_by(
         'first_name',
         'John'
-    ).attributes_to_get('last_name,stars,name').fetch()
+    ).attributes_to_get('last_name,stars,name').fetch(object=True)
     assert user.get_count == 1
     assert 'first_name' not in response_find_by[0].data()
     assert response_find_by[0].data().get('last_name', None)
@@ -143,7 +143,7 @@ def test_it_should_paginate():
     limit = 1
     user = User()
 
-    user.find().fetch(True)
+    user.find().fetch(True, object=True)
     total_count = user.get_count
 
     search = user.find().limit(limit)
@@ -152,7 +152,7 @@ def test_it_should_paginate():
     if last_evaluated_key:
         search = search.offset(last_evaluated_key)
 
-    results = search.fetch()
+    results = search.fetch(object=True)
     results_count = user.get_count
 
     assert total_count == 3
@@ -166,10 +166,10 @@ def test_it_should_fetch_records_ordered():
     create_table()
     save_record()
     user = User()
-    response_ascending = user.find().order('first_name').fetch()
+    response_ascending = user.find().order('first_name').fetch(object=True)
     assert response_ascending[0].data().get('first_name', None) == 'Anna'
     assert response_ascending[2].data().get('first_name', None) == 'John'
-    response_descending = user.find().order('first_name', False).fetch()
+    response_descending = user.find().order('first_name', False).fetch(object=True)
     assert response_descending[0].data().get('first_name', None) == 'John'
     assert response_descending[2].data().get('first_name', None) == 'Anna'
 
