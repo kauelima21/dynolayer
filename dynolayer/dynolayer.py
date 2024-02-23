@@ -492,5 +492,6 @@ class DynoLayer:
         if object:
             for item in response:
                 transformed_response.append(self._transform_into_layer(item))
+            return transformed_response
 
-        return transformed_response
+        return response
