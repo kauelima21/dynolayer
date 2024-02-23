@@ -278,6 +278,8 @@ class DynoLayer:
                 }
             )
             for key, value in response['Item'].items():
+                if isinstance(value, Decimal):
+                    value = int(value)
                 setattr(self, key, value)
             return self
         except Exception as e:
