@@ -6,6 +6,7 @@ import pytz
 from datetime import datetime
 from dotenv import load_dotenv
 from decimal import Decimal
+from typing import Literal
 
 
 class DynoLayer:
@@ -23,15 +24,15 @@ class DynoLayer:
         self._timestamps = timestamps
         self._limit = 50
         self._offset = False
-        self._order_by = None
-        self._count = None
+        self._order_by = {}
+        self._count = 0
         self._secondary_index = None
         self._attributes_to_get = None
         self._filter_expression = None
         self._filter_params = None
-        self._filter_params_name = None
-        self._last_evaluated_key = None
-        self._error = None
+        self._filter_params_name = {}
+        self._last_evaluated_key = {}
+        self._error = ''
         self._is_find_by = False
         self._is_query_operation = False
         self._just_count = False
@@ -81,12 +82,19 @@ class DynoLayer:
 
     Returns:
     self: The DynoLayer.
+    query_by('likes', '>', 10)
     """
 
-    def query_by(self, key: str, key_value, secondary_index=None):
+    def query_by(
+            self,
+            key: str,
+            comparator: Literal["=", "<>", "<", "<=", ">", ">="],
+            key_value,
+            secondary_index = None
+        ):
         self._is_query_operation = True
         self._secondary_index = secondary_index
-        return self.find_by(key, key_value)
+        return self.find_by(key, comparator, key_value)
 
     """
     Args:
@@ -99,9 +107,9 @@ class DynoLayer:
 
     def find(
             self,
-            filter_expression: str = None,
-            filter_params: dict = None,
-            filter_params_name: dict = None
+            filter_expression: str = '',
+            filter_params: dict = {},
+            filter_params_name: dict = {}
     ):
         self._filter_expression = filter_expression
         self._filter_params = filter_params
@@ -131,13 +139,18 @@ class DynoLayer:
     self: The DynoLayer.
     """
 
-    def find_by(self, attribute: str, attribute_value):
+    def find_by(
+            self,
+            attribute: str,
+            comparator: Literal["=", "<>", "<", "<=", ">", ">="],
+            attribute_value
+        ):
         self._is_find_by = True
 
         if isinstance(attribute_value, dict) or isinstance(attribute_value, list):
             attribute_value = json.dumps(attribute_value)
 
-        self._filter_expression = f'#{attribute} = :{attribute}'
+        self._filter_expression = f'#{attribute} {comparator} :{attribute}'
         self._filter_params = {
             f':{attribute}': attribute_value
         }
@@ -383,8 +396,7 @@ class DynoLayer:
 
     def _safe(self):
         if self._timestamps:
-            zone = os.environ.get('TIMESTAMP_TIMEZONE') if os.environ.get('TIMESTAMP_TIMEZONE',
-                                                                          None) else 'America/Sao_Paulo'
+            zone = os.environ.get('TIMESTAMP_TIMEZONE', 'America/Sao_Paulo')
             timezone = pytz.timezone(zone)
             current_date = datetime.now(timezone)
             if not self._data.get(self._partition_key):
@@ -407,7 +419,7 @@ class DynoLayer:
         required = True
         if len(self._required_fields) == 0:
             return required
-        for key, value in self._data.items():
+        for key, _ in self._data.items():
             if key not in self._required_fields:
                 required = False
             else:
@@ -503,3 +515,4 @@ class DynoLayer:
             return transformed_response
 
         return response
+
