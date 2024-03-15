@@ -2,7 +2,7 @@ import boto3
 import pytest
 import os
 from dynolayer.dynolayer import DynoLayer
-from moto import mock_aws
+from moto import mock_dynamodb
 
 
 def create_table():
@@ -64,7 +64,7 @@ class User(DynoLayer):
         super().__init__('users', ['first_name'])
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_create_a_record():
     create_table()
     user = User()
@@ -85,7 +85,7 @@ def test_it_should_create_a_record():
     assert user.id
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_not_create_a_record():
     create_table()
     user = User()
@@ -104,7 +104,7 @@ def test_it_should_not_create_a_record():
     assert user.error == 'All required fields must be setted'
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_update_a_record():
     create_table()
     save_record()

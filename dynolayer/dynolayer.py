@@ -3,6 +3,8 @@ import json
 import uuid
 import os
 import pytz
+import random
+import string
 from datetime import datetime
 from dotenv import load_dotenv
 from decimal import Decimal
@@ -29,6 +31,7 @@ class DynoLayer:
         self._secondary_index = ''
         self._attributes_to_get = ''
         self._filter_expression = ''
+        self._query_filter_expression = ''
         self._filter_params = {}
         self._filter_params_name = {}
         self._last_evaluated_key = {}
@@ -88,13 +91,34 @@ class DynoLayer:
     def query_by(
             self,
             key: str,
-            comparator: Literal["=", "<>", "<", "<=", ">", ">="],
+            comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
             key_value,
-            secondary_index = None
-        ):
+            secondary_index=None
+    ):
         self._is_query_operation = True
         self._secondary_index = secondary_index
         return self.find_by(key, comparator, key_value)
+
+    """
+        Args:
+        key (str): The table key to filter on.
+        key_value: The value to use on the filter.
+
+        Returns:
+        self: The DynoLayer.
+        or_query_by('likes', '<', 20)
+        """
+
+    def or_query_by(
+            self,
+            key: str,
+            comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
+            key_value,
+            secondary_index=None
+    ):
+        self._is_query_operation = True
+        self._secondary_index = secondary_index
+        return self.or_find_by(key, comparator, key_value)
 
     """
     Args:
@@ -108,9 +132,13 @@ class DynoLayer:
     def find(
             self,
             filter_expression: str = '',
-            filter_params: dict = {},
-            filter_params_name: dict = {}
+            filter_params=None,
+            filter_params_name=None
     ):
+        if filter_params_name is None:
+            filter_params_name = {}
+        if filter_params is None:
+            filter_params = {}
         self._filter_expression = filter_expression
         self._filter_params = filter_params
         self._filter_params_name = filter_params_name
@@ -142,20 +170,141 @@ class DynoLayer:
     def find_by(
             self,
             attribute: str,
-            comparator: Literal["=", "<>", "<", "<=", ">", ">="],
+            comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
             attribute_value
-        ):
-        self._is_find_by = True
+    ):
+        use_and_operator = ''
+        old_att = ''
+        if self._is_find_by:
+            use_and_operator = ' AND '
+            if str(self._filter_params.get(f':{attribute}', '')):
+                letters = string.ascii_lowercase
+                random_str = ''
+                for i in range(4):
+                    random_str += random.choice(letters)
+                old_att = attribute
+                attribute = random_str + attribute
+
+        if not self._is_find_by:
+            self._is_find_by = True
+
+        if isinstance(attribute_value, dict) or (isinstance(attribute_value, list) and comparator != 'BETWEEN'):
+            attribute_value = json.dumps(attribute_value)
+
+        filter_param = {
+            f':{attribute}': attribute_value
+        }
+        if comparator == 'BETWEEN':
+            self._filter_expression += f'{use_and_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})'
+            filter_param = {
+                f':{attribute[0]}': attribute_value[0],
+                f':{attribute[1]}': attribute_value[1]
+            }
+        elif comparator == 'begins_with':
+            self._filter_expression += f'{use_and_operator}({comparator}(#{attribute},:{attribute}))'
+        else:
+            self._filter_expression += f'{use_and_operator}(#{attribute} {comparator} :{attribute})'
+        self._filter_params.update(filter_param)
+        self._filter_params_name.update({
+            f'#{attribute}': old_att if old_att else attribute
+        })
+
+        return self
+
+    """
+        Args:
+        attribute (str): The table attribute to filter on.
+        attribute_value: The value to use on the filter.
+
+        Returns:
+        self: The DynoLayer.
+        """
+
+    def or_find_by(
+            self,
+            attribute: str,
+            comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
+            attribute_value
+    ):
+        use_or_operator = ' OR '
+        old_att = ''
+        if self._is_find_by:
+            if str(self._filter_params.get(f':{attribute}', '')):
+                letters = string.ascii_lowercase
+                random_str = ''
+                for i in range(4):
+                    random_str += random.choice(letters)
+                old_att = attribute
+                attribute = random_str + attribute
+
+        if not self._is_find_by:
+            self._is_find_by = True
+
+        if isinstance(attribute_value, dict) or (isinstance(attribute_value, list) and comparator != 'BETWEEN'):
+            attribute_value = json.dumps(attribute_value)
+
+        filter_param = {
+            f':{attribute}': attribute_value
+        }
+        if comparator == 'BETWEEN':
+            self._filter_expression += f'{use_or_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})'
+            filter_param = {
+                f':{attribute[0]}': attribute_value[0],
+                f':{attribute[1]}': attribute_value[1]
+            }
+        elif comparator == 'begins_with':
+            self._filter_expression += f'{use_or_operator}({comparator}(#{attribute},:{attribute}))'
+        else:
+            self._filter_expression += f'{use_or_operator}(#{attribute} {comparator} :{attribute})'
+        self._filter_params.update(filter_param)
+        self._filter_params_name.update({
+            f'#{attribute}': old_att if old_att else attribute
+        })
+
+        return self
+
+    """
+    This function create a FilterExpression for a query operation
+    Args:
+    attributes (str): The specific attributes to return from table.
+
+    Returns:
+    self: The DynoLayer.
+    """
+
+    def filter(
+            self,
+            attribute: str,
+            comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
+            attribute_value,
+            logical_operator: Literal['AND', 'OR', 'NOT'] = ''
+    ):
+        old_att = ''
+        if self._is_find_by:
+            if str(self._filter_params.get(f':{attribute}', '')):
+                letters = string.ascii_lowercase
+                random_str = ''
+                for i in range(4):
+                    random_str += random.choice(letters)
+                old_att = attribute
+                attribute = random_str + attribute
 
         if isinstance(attribute_value, dict) or isinstance(attribute_value, list):
             attribute_value = json.dumps(attribute_value)
 
-        self._filter_expression += f'#{attribute} {comparator} :{attribute}'
+        if logical_operator:
+            logical_operator = f' {logical_operator} '
+        if comparator == 'BETWEEN':
+            self._query_filter_expression += f'{logical_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})'
+        elif comparator == 'begins_with':
+            self._query_filter_expression += f'{logical_operator}({comparator}(#{attribute},:{attribute}))'
+        else:
+            self._query_filter_expression += f'{logical_operator}(#{attribute} {comparator} :{attribute})'
         self._filter_params.update({
             f':{attribute}': attribute_value
         })
         self._filter_params_name.update({
-            f'#{attribute}': attribute
+            f'#{attribute}': old_att if old_att else attribute
         })
 
         return self
@@ -257,6 +406,10 @@ class DynoLayer:
             if self._filter_expression:
                 filter_key = 'KeyConditionExpression' if self._is_query_operation else 'FilterExpression'
                 scan_params.update({filter_key: self._filter_expression})
+                if self._query_filter_expression:
+                    if not scan_params.get('FilterExpression', None):
+                        scan_params['FilterExpression'] = ''
+                    scan_params['FilterExpression'] += self._query_filter_expression
                 scan_params.update({'ExpressionAttributeValues': self._filter_params})
                 scan_params.update({'ExpressionAttributeNames': self._filter_params_name})
 
@@ -267,6 +420,9 @@ class DynoLayer:
                 scan_params.update({'IndexName': self._secondary_index})
 
             self._is_find_by = False  # return to default value
+            self._filter_expression = ''  # return to default value
+            self._filter_params = {}  # return to default value
+            self._filter_params_name = {}  # return to default value
             if self._is_query_operation:
                 return self._order_response(self._fetch_query(scan_params, paginate_through_results), object=object)
 
@@ -352,7 +508,7 @@ class DynoLayer:
             self._table.put_item(
                 Item=data
             )
-            self.id = data[self._partition_key]
+            self._data['id'] = data[self._partition_key]
             return True
         except Exception as e:
             self._error = str(e)
@@ -494,7 +650,7 @@ class DynoLayer:
     """
 
     def _order_response(self, response, object=False):
-        if len(response) == 0:
+        if not response or len(response) == 0:
             return response
 
         if self._order_by:
@@ -516,4 +672,3 @@ class DynoLayer:
             return transformed_response
 
         return response
-

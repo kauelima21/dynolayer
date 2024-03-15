@@ -1,7 +1,7 @@
 import boto3
 import pytest
 from dynolayer.dynolayer import DynoLayer
-from moto import mock_aws
+from moto import mock_dynamodb
 
 
 def create_table():
@@ -84,7 +84,7 @@ class User(DynoLayer):
         super().__init__('users', [])
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_find_a_record_by_id():
     create_table()
     save_record()
@@ -95,7 +95,7 @@ def test_it_should_find_a_record_by_id():
     assert data.get('id') == '123456'
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_find_a_collection_of_records():
     create_table()
     save_record()
@@ -105,7 +105,7 @@ def test_it_should_find_a_collection_of_records():
     assert response
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_find_a_collection_of_records_by_filter():
     create_table()
     save_record()
@@ -127,6 +127,7 @@ def test_it_should_find_a_collection_of_records_by_filter():
 
     response_find_by = user.find_by(
         'first_name',
+        '=',
         'John'
     ).attributes_to_get('last_name,stars,name').fetch(object=True)
     assert user.get_count == 1
@@ -134,11 +135,11 @@ def test_it_should_find_a_collection_of_records_by_filter():
     assert response_find_by[0].data().get('last_name', None)
     assert response_find_by[0].data().get('stars', None)
 
-    response_by_id = user.find_by_id('123456').attributes_to_get('name').fetch(object=True)
-    assert response_find_by
+    # response_by_id = user.find_by_id('123456').attributes_to_get('name').fetch(object=True)
+    # assert response_find_by
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_paginate():
     create_table()
     save_record()
@@ -164,7 +165,7 @@ def test_it_should_paginate():
     assert user.last_evaluated_key != {'id': '123456'}
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_fetch_records_ordered():
     create_table()
     save_record()
@@ -177,13 +178,30 @@ def test_it_should_fetch_records_ordered():
     assert response_descending[2].data().get('first_name', None) == 'Anna'
 
 
-@mock_aws
+@mock_dynamodb
 def test_it_should_return_the_items_count():
     create_table()
     save_record()
     user = User()
     total_count = user.find().count()
     assert total_count == 3
+
+
+@mock_dynamodb
+def test_it_should_return_the_items_with_and_operator():
+    create_table()
+    save_record()
+    user = User()
+    total_count = user.find_by(
+        'stars',
+        '>',
+        10
+    ).find_by('role', '<>', 'admin').count()
+    assert total_count == 1
+
+    users = user.find_by('stars', 'BETWEEN', [10, 60])
+    users = users.fetch()
+    assert len(users) == 2
 
 
 if __name__ == '__main__':

@@ -117,7 +117,7 @@ Para os casos de consultas com filtro em determinada propriedade que não seja u
 
 ```python
 users = User()
-online_users = users.find_by('status', 'online').fetch(True)
+online_users = users.find_by('status', '=', 'online').fetch(True)
 print(f'{users.get_count} online no momento!')
 ```
 
@@ -126,7 +126,7 @@ Para os casos de consultas com filtro em determinada chave de partição, pode-s
 
 ```python
 users = User()
-online_users = users.query_by('status', 'online').fetch(True)
+online_users = users.query_by('status', '=', 'online').fetch(True)
 print(f'{users.get_count} online no momento!')
 ```
 
@@ -135,7 +135,7 @@ Serve para ordenar de acordo com determinado atributo, podendo também trazer a 
 
 ```python
 users = User()
-online_users = users.find_by('status', 'online').order('first_name').fetch(True)
+online_users = users.find_by('status', '=', 'online').order('first_name').fetch(True)
 print(f'{users.get_count} online no momento!')
 ```
 
@@ -144,7 +144,7 @@ Caso queira contar o total de itens na tabela ou operação que você fizer sem 
 
 ```python
 users = User()
-online_users = users.find_by('status', 'online').order('first_name').count()
+online_users = users.find_by('status', '=', 'online').order('first_name').count()
 print(f'{online_users} online no momento!')
 ```
 
@@ -152,7 +152,7 @@ print(f'{online_users} online no momento!')
 Por default retorna os dados como um dict, mas ao passar o argumento object como True ele retorna os registros como um objeto DynoLayer.
 
 ```python
-users = User().find_by('status', 'online').order('first_name').fetch(object=True)
+users = User().find_by('status', '=', 'online').order('first_name').fetch(object=True)
 print(users[0].name)
 ```
 
