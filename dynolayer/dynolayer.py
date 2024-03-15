@@ -26,10 +26,10 @@ class DynoLayer:
         self._offset = False
         self._order_by = {}
         self._count = 0
-        self._secondary_index = None
-        self._attributes_to_get = None
-        self._filter_expression = None
-        self._filter_params = None
+        self._secondary_index = ''
+        self._attributes_to_get = ''
+        self._filter_expression = ''
+        self._filter_params = {}
         self._filter_params_name = {}
         self._last_evaluated_key = {}
         self._error = ''
@@ -150,13 +150,13 @@ class DynoLayer:
         if isinstance(attribute_value, dict) or isinstance(attribute_value, list):
             attribute_value = json.dumps(attribute_value)
 
-        self._filter_expression = f'#{attribute} {comparator} :{attribute}'
-        self._filter_params = {
+        self._filter_expression += f'#{attribute} {comparator} :{attribute}'
+        self._filter_params.update({
             f':{attribute}': attribute_value
-        }
-        self._filter_params_name = {
+        })
+        self._filter_params_name.update({
             f'#{attribute}': attribute
-        }
+        })
 
         return self
 
@@ -266,6 +266,7 @@ class DynoLayer:
             if self._secondary_index:
                 scan_params.update({'IndexName': self._secondary_index})
 
+            self._is_find_by = False  # return to default value
             if self._is_query_operation:
                 return self._order_response(self._fetch_query(scan_params, paginate_through_results), object=object)
 

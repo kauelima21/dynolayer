@@ -134,6 +134,9 @@ def test_it_should_find_a_collection_of_records_by_filter():
     assert response_find_by[0].data().get('last_name', None)
     assert response_find_by[0].data().get('stars', None)
 
+    response_by_id = user.find_by_id('123456').attributes_to_get('name').fetch(object=True)
+    assert response_find_by
+
 
 @mock_aws
 def test_it_should_paginate():
