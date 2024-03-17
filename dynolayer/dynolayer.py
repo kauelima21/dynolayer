@@ -100,27 +100,6 @@ class DynoLayer:
         return self.find_by(key, comparator, key_value)
 
     """
-        Args:
-        key (str): The table key to filter on.
-        key_value: The value to use on the filter.
-
-        Returns:
-        self: The DynoLayer.
-        or_query_by('likes', '<', 20)
-        """
-
-    def or_query_by(
-            self,
-            key: str,
-            comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-            key_value,
-            secondary_index=None
-    ):
-        self._is_query_operation = True
-        self._secondary_index = secondary_index
-        return self.or_find_by(key, comparator, key_value)
-
-    """
     Args:
     filter_expression (str): The filter expression string.
     filter_params (dict): The filter params.
@@ -204,58 +183,6 @@ class DynoLayer:
             self._filter_expression += f'{use_and_operator}({comparator}(#{attribute},:{attribute}))'
         else:
             self._filter_expression += f'{use_and_operator}(#{attribute} {comparator} :{attribute})'
-        self._filter_params.update(filter_param)
-        self._filter_params_name.update({
-            f'#{attribute}': old_att if old_att else attribute
-        })
-
-        return self
-
-    """
-        Args:
-        attribute (str): The table attribute to filter on.
-        attribute_value: The value to use on the filter.
-
-        Returns:
-        self: The DynoLayer.
-        """
-
-    def or_find_by(
-            self,
-            attribute: str,
-            comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-            attribute_value
-    ):
-        use_or_operator = ' OR '
-        old_att = ''
-        if self._is_find_by:
-            if str(self._filter_params.get(f':{attribute}', '')):
-                letters = string.ascii_lowercase
-                random_str = ''
-                for i in range(4):
-                    random_str += random.choice(letters)
-                old_att = attribute
-                attribute = random_str + attribute
-
-        if not self._is_find_by:
-            self._is_find_by = True
-
-        if isinstance(attribute_value, dict) or (isinstance(attribute_value, list) and comparator != 'BETWEEN'):
-            attribute_value = json.dumps(attribute_value)
-
-        filter_param = {
-            f':{attribute}': attribute_value
-        }
-        if comparator == 'BETWEEN':
-            self._filter_expression += f'{use_or_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})'
-            filter_param = {
-                f':{attribute[0]}': attribute_value[0],
-                f':{attribute[1]}': attribute_value[1]
-            }
-        elif comparator == 'begins_with':
-            self._filter_expression += f'{use_or_operator}({comparator}(#{attribute},:{attribute}))'
-        else:
-            self._filter_expression += f'{use_or_operator}(#{attribute} {comparator} :{attribute})'
         self._filter_params.update(filter_param)
         self._filter_params_name.update({
             f'#{attribute}': old_att if old_att else attribute
@@ -508,7 +435,7 @@ class DynoLayer:
             self._table.put_item(
                 Item=data
             )
-            self._data['id'] = data[self._partition_key]
+            self._data[self._partition_key] = data[self._partition_key]
             return True
         except Exception as e:
             self._error = str(e)
@@ -556,7 +483,7 @@ class DynoLayer:
             zone = os.environ.get('TIMESTAMP_TIMEZONE', 'America/Sao_Paulo')
             timezone = pytz.timezone(zone)
             current_date = datetime.now(timezone)
-            if not self._data.get(self._partition_key):
+            if not self._data.get('created_at', None):
                 self._data['created_at'] = int(current_date.timestamp())
             self._data['updated_at'] = int(current_date.timestamp())
 
