@@ -180,5 +180,24 @@ def test_it_should_return_the_items_with_and_operator():
     assert users[0].get('first_name') == 'Anna'
 
 
+@mock_dynamodb
+def test_it_should_paginate():
+    create_table()
+    save_record()
+
+    limit = 1
+    user = User()
+
+    search = user.query_by(
+        'role',
+        '=',
+        'admin',
+        'role-index'
+    ).limit(limit).fetch(paginate_through_results=True)
+    total_count = user.get_count
+
+    assert total_count == 2
+
+
 if __name__ == '__main__':
     pytest.main()

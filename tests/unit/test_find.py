@@ -147,7 +147,7 @@ def test_it_should_paginate():
     limit = 1
     user = User()
 
-    user.find().fetch(True, object=True)
+    user.find().fetch(paginate_through_results=True, object=True)
     total_count = user.get_count
 
     search = user.find().limit(limit)

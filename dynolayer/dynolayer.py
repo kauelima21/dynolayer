@@ -525,8 +525,7 @@ class DynoLayer:
             data = response.get('Items', None)
             self._count = response['Count']
 
-        if response.get('LastEvaluatedKey', None):
-            self._last_evaluated_key = response['LastEvaluatedKey']
+        self._last_evaluated_key = response.get('LastEvaluatedKey', None)
 
         if paginate_through_results:
             while 'LastEvaluatedKey' in response:
@@ -534,7 +533,8 @@ class DynoLayer:
                 response = self._table.scan(**scan_params)
                 data.extend(response.get('Items', None))
                 self._count += response['Count']
-                self._last_evaluated_key = response['LastEvaluatedKey']
+                if response.get('LastEvaluatedKey', None):
+                    self._last_evaluated_key = response['LastEvaluatedKey']
 
         return data
 
@@ -552,8 +552,7 @@ class DynoLayer:
             data = response.get('Items', None)
             self._count = response['Count']
 
-        if response.get('LastEvaluatedKey', None):
-            self._last_evaluated_key = response['LastEvaluatedKey']
+        self._last_evaluated_key = response.get('LastEvaluatedKey', None)
 
         if paginate_through_results:
             while 'LastEvaluatedKey' in response:
@@ -561,7 +560,8 @@ class DynoLayer:
                 response = self._table.query(**scan_params)
                 data.extend(response.get('Items', None))
                 self._count += response['Count']
-                self._last_evaluated_key = response['LastEvaluatedKey']
+                if response.get('LastEvaluatedKey', None):
+                    self._last_evaluated_key = response['LastEvaluatedKey']
 
         return data
 
