@@ -1,23 +1,24 @@
-import boto3
 import json
-import uuid
 import os
-import pytz
 import random
 import string
+import uuid
 from datetime import datetime
-from dotenv import load_dotenv
 from decimal import Decimal
 from typing import Literal
+
+import boto3
+import pytz
+from dotenv import load_dotenv
 
 
 class DynoLayer:
     def __init__(
-            self,
-            entity: str,
-            required_fields: list,
-            partition_key: str = 'id',
-            timestamps: bool = True
+        self,
+        entity: str,
+        required_fields: list,
+        partition_key: str = "id",
+        timestamps: bool = True,
     ) -> None:
         load_dotenv()
         self._entity = entity
@@ -28,30 +29,30 @@ class DynoLayer:
         self._offset = False
         self._order_by = {}
         self._count = 0
-        self._secondary_index = ''
-        self._attributes_to_get = ''
-        self._filter_expression = ''
-        self._query_filter_expression = ''
+        self._secondary_index = ""
+        self._attributes_to_get = ""
+        self._filter_expression = ""
+        self._query_filter_expression = ""
         self._filter_params = {}
         self._filter_params_name = {}
         self._last_evaluated_key = {}
-        self._error = ''
+        self._error = ""
         self._is_find_by = False
         self._is_query_operation = False
         self._just_count = False
-        self._region = 'sa-east-1'
+        self._region = "sa-east-1"
         self._dynamodb = self._load_dynamo()
         self._table = self._dynamodb.Table(self._entity)
         self._data = {}
 
     def __setattr__(self, name, value):
-        if '_data' in self.__dict__ and name not in self.__dict__:
+        if "_data" in self.__dict__ and name not in self.__dict__:
             self._data[name] = value
         else:
             super().__setattr__(name, value)
 
     def __getattr__(self, name: str):
-        if '_data' in self.__dict__ and isinstance(self._data, dict):
+        if "_data" in self.__dict__ and isinstance(self._data, dict):
             return self._data.get(name)
         else:
             return object.__getattribute__(self, name)
@@ -68,14 +69,12 @@ class DynoLayer:
 
     def _load_dynamo(self):
         endpoint_url = None
-        if os.environ.get('LOCAL_ENDPOINT'):
-            endpoint_url = os.environ.get('LOCAL_ENDPOINT')
-        if os.environ.get('REGION'):
-            self._region = os.environ.get('REGION')
+        if os.environ.get("LOCAL_ENDPOINT"):
+            endpoint_url = os.environ.get("LOCAL_ENDPOINT")
+        if os.environ.get("REGION"):
+            self._region = os.environ.get("REGION")
         return boto3.resource(
-            'dynamodb',
-            region_name=self._region,
-            endpoint_url=endpoint_url
+            "dynamodb", region_name=self._region, endpoint_url=endpoint_url
         )
 
     """
@@ -89,11 +88,11 @@ class DynoLayer:
     """
 
     def query_by(
-            self,
-            key: str,
-            comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-            key_value,
-            secondary_index=None
+        self,
+        key: str,
+        comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
+        key_value,
+        secondary_index=None,
     ):
         self._is_query_operation = True
         self._secondary_index = secondary_index
@@ -109,10 +108,7 @@ class DynoLayer:
     """
 
     def find(
-            self,
-            filter_expression: str = '',
-            filter_params=None,
-            filter_params_name=None
+        self, filter_expression: str = "", filter_params=None, filter_params_name=None
     ):
         if filter_params_name is None:
             filter_params_name = {}
@@ -124,11 +120,11 @@ class DynoLayer:
         return self
 
     def query(
-            self,
-            filter_expression: str,
-            filter_params: dict,
-            filter_params_name: dict,
-            index_or_partition_key
+        self,
+        filter_expression: str,
+        filter_params: dict,
+        filter_params_name: dict,
+        index_or_partition_key,
     ):
         self._is_query_operation = True
         self._secondary_index = index_or_partition_key
@@ -147,18 +143,18 @@ class DynoLayer:
     """
 
     def find_by(
-            self,
-            attribute: str,
-            comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-            attribute_value
+        self,
+        attribute: str,
+        comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
+        attribute_value,
     ):
-        use_and_operator = ''
-        old_att = ''
+        use_and_operator = ""
+        old_att = ""
         if self._is_find_by:
-            use_and_operator = ' AND '
-            if str(self._filter_params.get(f':{attribute}', '')):
+            use_and_operator = " AND "
+            if str(self._filter_params.get(f":{attribute}", "")):
                 letters = string.ascii_lowercase
-                random_str = ''
+                random_str = ""
                 for i in range(4):
                     random_str += random.choice(letters)
                 old_att = attribute
@@ -167,26 +163,30 @@ class DynoLayer:
         if not self._is_find_by:
             self._is_find_by = True
 
-        if isinstance(attribute_value, dict) or (isinstance(attribute_value, list) and comparator != 'BETWEEN'):
+        if isinstance(attribute_value, dict) or (
+            isinstance(attribute_value, list) and comparator != "BETWEEN"
+        ):
             attribute_value = json.dumps(attribute_value)
 
-        filter_param = {
-            f':{attribute}': attribute_value
-        }
-        if comparator == 'BETWEEN':
-            self._filter_expression += f'{use_and_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})'
+        filter_param = {f":{attribute}": attribute_value}
+        if comparator == "BETWEEN":
+            self._filter_expression += f"{use_and_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})"
             filter_param = {
-                f':{attribute[0]}': attribute_value[0],
-                f':{attribute[1]}': attribute_value[1]
+                f":{attribute[0]}": attribute_value[0],
+                f":{attribute[1]}": attribute_value[1],
             }
-        elif comparator == 'begins_with':
-            self._filter_expression += f'{use_and_operator}({comparator}(#{attribute},:{attribute}))'
+        elif comparator == "begins_with":
+            self._filter_expression += (
+                f"{use_and_operator}({comparator}(#{attribute},:{attribute}))"
+            )
         else:
-            self._filter_expression += f'{use_and_operator}(#{attribute} {comparator} :{attribute})'
+            self._filter_expression += (
+                f"{use_and_operator}(#{attribute} {comparator} :{attribute})"
+            )
         self._filter_params.update(filter_param)
-        self._filter_params_name.update({
-            f'#{attribute}': old_att if old_att else attribute
-        })
+        self._filter_params_name.update(
+            {f"#{attribute}": old_att if old_att else attribute}
+        )
 
         return self
 
@@ -200,17 +200,17 @@ class DynoLayer:
     """
 
     def filter(
-            self,
-            attribute: str,
-            comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-            attribute_value,
-            logical_operator: Literal['AND', 'OR', 'NOT'] = ''
+        self,
+        attribute: str,
+        comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
+        attribute_value,
+        logical_operator: Literal["AND", "OR", "NOT"] = "",
     ):
-        old_att = ''
+        old_att = ""
         if self._is_find_by:
-            if str(self._filter_params.get(f':{attribute}', '')):
+            if str(self._filter_params.get(f":{attribute}", "")):
                 letters = string.ascii_lowercase
-                random_str = ''
+                random_str = ""
                 for i in range(4):
                     random_str += random.choice(letters)
                 old_att = attribute
@@ -220,19 +220,21 @@ class DynoLayer:
             attribute_value = json.dumps(attribute_value)
 
         if logical_operator:
-            logical_operator = f' {logical_operator} '
-        if comparator == 'BETWEEN':
-            self._query_filter_expression += f'{logical_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})'
-        elif comparator == 'begins_with':
-            self._query_filter_expression += f'{logical_operator}({comparator}(#{attribute},:{attribute}))'
+            logical_operator = f" {logical_operator} "
+        if comparator == "BETWEEN":
+            self._query_filter_expression += f"{logical_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})"
+        elif comparator == "begins_with":
+            self._query_filter_expression += (
+                f"{logical_operator}({comparator}(#{attribute},:{attribute}))"
+            )
         else:
-            self._query_filter_expression += f'{logical_operator}(#{attribute} {comparator} :{attribute})'
-        self._filter_params.update({
-            f':{attribute}': attribute_value
-        })
-        self._filter_params_name.update({
-            f'#{attribute}': old_att if old_att else attribute
-        })
+            self._query_filter_expression += (
+                f"{logical_operator}(#{attribute} {comparator} :{attribute})"
+            )
+        self._filter_params.update({f":{attribute}": attribute_value})
+        self._filter_params_name.update(
+            {f"#{attribute}": old_att if old_att else attribute}
+        )
 
         return self
 
@@ -247,10 +249,10 @@ class DynoLayer:
     def attributes_to_get(self, attributes: str):
         str_attributes_to_get = attributes
         if self._is_find_by:
-            str_attributes_to_get = ''
-            for attr in attributes.split(','):
-                str_attributes_to_get += f'#{attr},'
-                self._filter_params_name.update({f'#{attr}': attr})
+            str_attributes_to_get = ""
+            for attr in attributes.split(","):
+                str_attributes_to_get += f"#{attr},"
+                self._filter_params_name.update({f"#{attr}": attr})
 
             str_attributes_to_get = str_attributes_to_get[:-1]
         self._attributes_to_get = str_attributes_to_get
@@ -297,7 +299,7 @@ class DynoLayer:
         return self
 
     def order(self, attribute: str, is_ascending: bool = True):
-        self._order_by = {'attribute': attribute, 'is_ascending': is_ascending}
+        self._order_by = {"attribute": attribute, "is_ascending": is_ascending}
         return self
 
     """
@@ -320,40 +322,53 @@ class DynoLayer:
     def fetch(self, paginate_through_results: bool = False, object=False):
         return self._fetch(paginate_through_results, object=object)
 
-    def _fetch(self, paginate_through_results: bool = False, just_count=False, object=False):
+    def _fetch(
+        self, paginate_through_results: bool = False, just_count=False, object=False
+    ):
         try:
             scan_params = {
-                'TableName': self._entity,
-                'Limit': self._limit,
+                "TableName": self._entity,
+                "Limit": self._limit,
             }
 
             if just_count:
-                scan_params.update({'Select': 'COUNT'})
+                scan_params.update({"Select": "COUNT"})
 
             if self._filter_expression:
-                filter_key = 'KeyConditionExpression' if self._is_query_operation else 'FilterExpression'
+                filter_key = (
+                    "KeyConditionExpression"
+                    if self._is_query_operation
+                    else "FilterExpression"
+                )
                 scan_params.update({filter_key: self._filter_expression})
                 if self._query_filter_expression:
-                    if not scan_params.get('FilterExpression', None):
-                        scan_params['FilterExpression'] = ''
-                    scan_params['FilterExpression'] += self._query_filter_expression
-                scan_params.update({'ExpressionAttributeValues': self._filter_params})
-                scan_params.update({'ExpressionAttributeNames': self._filter_params_name})
+                    if not scan_params.get("FilterExpression", None):
+                        scan_params["FilterExpression"] = ""
+                    scan_params["FilterExpression"] += self._query_filter_expression
+                scan_params.update({"ExpressionAttributeValues": self._filter_params})
+                scan_params.update(
+                    {"ExpressionAttributeNames": self._filter_params_name}
+                )
 
             if self._attributes_to_get:
-                scan_params.update({'ProjectionExpression': self._attributes_to_get})
+                scan_params.update({"ProjectionExpression": self._attributes_to_get})
 
             if self._secondary_index:
-                scan_params.update({'IndexName': self._secondary_index})
+                scan_params.update({"IndexName": self._secondary_index})
 
             self._is_find_by = False  # return to default value
-            self._filter_expression = ''  # return to default value
+            self._filter_expression = ""  # return to default value
             self._filter_params = {}  # return to default value
             self._filter_params_name = {}  # return to default value
             if self._is_query_operation:
-                return self._order_response(self._fetch_query(scan_params, paginate_through_results), object=object)
+                return self._order_response(
+                    self._fetch_query(scan_params, paginate_through_results),
+                    object=object,
+                )
 
-            return self._order_response(self._fetch_scan(scan_params, paginate_through_results), object=object)
+            return self._order_response(
+                self._fetch_scan(scan_params, paginate_through_results), object=object
+            )
         except Exception as e:
             self._error = str(e)
             return None
@@ -369,12 +384,9 @@ class DynoLayer:
     def find_by_id(self, partition_key: str):
         try:
             response = self._table.get_item(
-                TableName=self._entity,
-                Key={
-                    self._partition_key: partition_key
-                }
+                TableName=self._entity, Key={self._partition_key: partition_key}
             )
-            for key, value in response['Item'].items():
+            for key, value in response["Item"].items():
                 if isinstance(value, Decimal):
                     value = int(value)
                 setattr(self, key, value)
@@ -390,33 +402,31 @@ class DynoLayer:
 
     def save(self) -> bool:
         if not self._required():
-            self._error = 'All required fields must be setted'
+            self._error = "All required fields must be setted"
             return False
         # update
         if self._data.get(self._partition_key):
             partition_key = self._data.get(self._partition_key)
             try:
-                update_expression = 'SET'
+                update_expression = "SET"
                 expression_values = {}
                 expression_names = {}
 
                 for key, value in self._safe():
-                    update_expression += f' #{key} = :{key},'
+                    update_expression += f" #{key} = :{key},"
                     if isinstance(value, dict) or isinstance(value, list):
                         value = json.dumps(value)
-                    expression_values[f':{key}'] = value
-                    expression_names[f'#{key}'] = key
+                    expression_values[f":{key}"] = value
+                    expression_names[f"#{key}"] = key
 
                 update_expression = update_expression[:-1]
 
                 self._table.update_item(
-                    Key={
-                        self._partition_key: partition_key
-                    },
+                    Key={self._partition_key: partition_key},
                     UpdateExpression=update_expression,
                     ExpressionAttributeValues=expression_values,
                     ExpressionAttributeNames=expression_names,
-                    ReturnValues='ALL_NEW'
+                    ReturnValues="ALL_NEW",
                 )
                 return True
             except Exception as e:
@@ -432,9 +442,7 @@ class DynoLayer:
                     value = json.dumps(value)
                 data[key] = value
 
-            self._table.put_item(
-                Item=data
-            )
+            self._table.put_item(Item=data)
             self._data[self._partition_key] = data[self._partition_key]
             return True
         except Exception as e:
@@ -454,10 +462,7 @@ class DynoLayer:
 
         try:
             self._table.delete_item(
-                TableName=self._entity,
-                Key={
-                    self._partition_key: partition_key
-                }
+                TableName=self._entity, Key={self._partition_key: partition_key}
             )
             return True
         except Exception as e:
@@ -480,12 +485,12 @@ class DynoLayer:
 
     def _safe(self):
         if self._timestamps:
-            zone = os.environ.get('TIMESTAMP_TIMEZONE', 'America/Sao_Paulo')
+            zone = os.environ.get("TIMESTAMP_TIMEZONE", "America/Sao_Paulo")
             timezone = pytz.timezone(zone)
             current_date = datetime.now(timezone)
-            if not self._data.get('created_at', None):
-                self._data['created_at'] = int(current_date.timestamp())
-            self._data['updated_at'] = int(current_date.timestamp())
+            if not self._data.get("created_at", None):
+                self._data["created_at"] = int(current_date.timestamp())
+            self._data["updated_at"] = int(current_date.timestamp())
 
         safe = list(self._data.items())
         for item in safe:
@@ -516,25 +521,25 @@ class DynoLayer:
         data = []
 
         if self._offset:
-            scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
+            scan_params.update({"ExclusiveStartKey": self._last_evaluated_key})
             response = self._table.scan(**scan_params)
-            data = response.get('Items', None)
-            self._count = response['Count']
+            data = response.get("Items", None)
+            self._count = response["Count"]
         else:
             response = self._table.scan(**scan_params)
-            data = response.get('Items', None)
-            self._count = response['Count']
+            data = response.get("Items", None)
+            self._count = response["Count"]
 
-        self._last_evaluated_key = response.get('LastEvaluatedKey', None)
+        self._last_evaluated_key = response.get("LastEvaluatedKey", None)
 
         if paginate_through_results:
-            while 'LastEvaluatedKey' in response:
-                scan_params.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
+            while "LastEvaluatedKey" in response:
+                scan_params.update({"ExclusiveStartKey": response["LastEvaluatedKey"]})
                 response = self._table.scan(**scan_params)
-                data.extend(response.get('Items', None))
-                self._count += response['Count']
-                if response.get('LastEvaluatedKey', None):
-                    self._last_evaluated_key = response['LastEvaluatedKey']
+                data.extend(response.get("Items", None))
+                self._count += response["Count"]
+                if response.get("LastEvaluatedKey", None):
+                    self._last_evaluated_key = response["LastEvaluatedKey"]
 
         return data
 
@@ -543,25 +548,25 @@ class DynoLayer:
         data = []
 
         if self._offset:
-            scan_params.update({'ExclusiveStartKey': self._last_evaluated_key})
+            scan_params.update({"ExclusiveStartKey": self._last_evaluated_key})
             response = self._table.query(**scan_params)
-            data = response.get('Items', None)
-            self._count = response['Count']
+            data = response.get("Items", None)
+            self._count = response["Count"]
         else:
             response = self._table.query(**scan_params)
-            data = response.get('Items', None)
-            self._count = response['Count']
+            data = response.get("Items", None)
+            self._count = response["Count"]
 
-        self._last_evaluated_key = response.get('LastEvaluatedKey', None)
+        self._last_evaluated_key = response.get("LastEvaluatedKey", None)
 
         if paginate_through_results:
-            while 'LastEvaluatedKey' in response:
-                scan_params.update({'ExclusiveStartKey': response['LastEvaluatedKey']})
+            while "LastEvaluatedKey" in response:
+                scan_params.update({"ExclusiveStartKey": response["LastEvaluatedKey"]})
                 response = self._table.query(**scan_params)
-                data.extend(response.get('Items', None))
-                self._count += response['Count']
-                if response.get('LastEvaluatedKey', None):
-                    self._last_evaluated_key = response['LastEvaluatedKey']
+                data.extend(response.get("Items", None))
+                self._count += response["Count"]
+                if response.get("LastEvaluatedKey", None):
+                    self._last_evaluated_key = response["LastEvaluatedKey"]
 
         return data
 
@@ -583,8 +588,8 @@ class DynoLayer:
         if self._order_by:
             response = sorted(
                 response,
-                key=lambda d: d[self._order_by.get('attribute')],
-                reverse=not self._order_by.get('is_ascending')
+                key=lambda d: d[self._order_by.get("attribute")],
+                reverse=not self._order_by.get("is_ascending"),
             )
 
         for item in response:
