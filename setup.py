@@ -5,10 +5,11 @@ with open('README.md', 'r') as file:
 
 setup(
     name='dynolayer',
-    version='0.5.0',
+    version='0.5.1',
     license='MIT License',
     packages=['dynolayer'],
-    install_requires=['boto3', 'pytz'],
+    install_requires=['pytz'],
+    extras_require={"aws": ["boto3"]},
     keywords=['dynolayer', 'dynamodb', 'active record', 'aws lambda'],
     author='Kauê Leal de Lima',
     author_email='kaueslim@gmail.com',

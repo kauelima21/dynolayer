@@ -13,5 +13,7 @@ pip install dynolayer
 ou
 
 ```sh
-pipenv install dynolayer
+pip install dynolayer[aws]
 ```
+
+para instalar com o boto3
