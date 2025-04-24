@@ -1,606 +1,230 @@
-import json
-import os
-import random
-import string
-import uuid
-from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import List, Dict, Literal, Any
 
-import boto3
-import pytz
-from dotenv import load_dotenv
+from dynolayer.crud_mixin import CrudMixin
+from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter
 
 
-class DynoLayer:
-    def __init__(
-        self,
-        entity: str,
-        required_fields: list,
-        partition_key: str = "id",
-        timestamps: bool = True,
-    ) -> None:
-        load_dotenv()
-        self._entity = entity
+class DynoLayer(CrudMixin):
+    def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True):
+        super().__init__(entity)
+
+        if fillable is None:
+            fillable = []
+
+        if required_fields is None:
+            required_fields = []
+
         self._required_fields = required_fields
-        self._partition_key = partition_key
         self._timestamps = timestamps
-        self._limit = 50
-        self._offset = False
-        self._order_by = {}
-        self._count = 0
-        self._secondary_index = ""
-        self._attributes_to_get = ""
-        self._filter_expression = ""
-        self._query_filter_expression = ""
-        self._filter_params = {}
-        self._filter_params_name = {}
-        self._last_evaluated_key = {}
-        self._error = ""
-        self._is_find_by = False
-        self._is_query_operation = False
-        self._just_count = False
-        self._region = "sa-east-1"
-        self._dynamodb = self._load_dynamo()
-        self._table = self._dynamodb.Table(self._entity)
+        self._fillable = fillable
+
+        self._index = None
+        self._limit = None
+        self._project_expression = None
+        self._filter_expression = list()
+        self._key_condition_expression = list()
+
         self._data = {}
-
-    def __setattr__(self, name, value):
-        if "_data" in self.__dict__ and name not in self.__dict__:
-            self._data[name] = value
-        else:
-            super().__setattr__(name, value)
-
-    def __getattr__(self, name: str):
-        if "_data" in self.__dict__ and isinstance(self._data, dict):
-            return self._data.get(name)
-        else:
-            return object.__getattribute__(self, name)
-
-    # Chamado apenas pelas classes filhas do DynoLayer
-    def _transform_into_layer(self, item: dict):
-        cls = self.__class__
-        new_item = cls.__new__(cls)
-        new_item.__dict__ = self.__dict__.copy()
-        new_item._data = {}  # limpa os antigos atributos
-        for key, value in item.items():
-            setattr(new_item, key, value)
-        return new_item
-
-    def _load_dynamo(self):
-        endpoint_url = None
-        if os.environ.get("LOCAL_ENDPOINT"):
-            endpoint_url = os.environ.get("LOCAL_ENDPOINT")
-        if os.environ.get("REGION"):
-            self._region = os.environ.get("REGION")
-        return boto3.resource(
-            "dynamodb", region_name=self._region, endpoint_url=endpoint_url
-        )
-
-    """
-    Args:
-    key (str): The table key to filter on.
-    key_value: The value to use on the filter.
-
-    Returns:
-    self: The DynoLayer.
-    query_by('likes', '>', 10)
-    """
-
-    def query_by(
-        self,
-        key: str,
-        comparator: Literal["=", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-        key_value,
-        secondary_index=None,
-    ):
-        self._is_query_operation = True
-        self._secondary_index = secondary_index
-        return self.find_by(key, comparator, key_value)
-
-    """
-    Args:
-    filter_expression (str): The filter expression string.
-    filter_params (dict): The filter params.
-
-    Returns:
-    self: The DynoLayer.
-    """
-
-    def find(
-        self, filter_expression: str = "", filter_params=None, filter_params_name=None
-    ):
-        if filter_params_name is None:
-            filter_params_name = {}
-        if filter_params is None:
-            filter_params = {}
-        self._filter_expression = filter_expression
-        self._filter_params = filter_params
-        self._filter_params_name = filter_params_name
-        return self
-
-    def query(
-        self,
-        filter_expression: str,
-        filter_params: dict,
-        filter_params_name: dict,
-        index_or_partition_key,
-    ):
-        self._is_query_operation = True
-        self._secondary_index = index_or_partition_key
-        self._filter_expression = filter_expression
-        self._filter_params = filter_params
-        self._filter_params_name = filter_params_name
-        return self
-
-    """
-    Args:
-    attribute (str): The table attribute to filter on.
-    attribute_value: The value to use on the filter.
-
-    Returns:
-    self: The DynoLayer.
-    """
-
-    def find_by(
-        self,
-        attribute: str,
-        comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-        attribute_value,
-    ):
-        use_and_operator = ""
-        old_att = ""
-        if self._is_find_by:
-            use_and_operator = " AND "
-            if str(self._filter_params.get(f":{attribute}", "")):
-                letters = string.ascii_lowercase
-                random_str = ""
-                for i in range(4):
-                    random_str += random.choice(letters)
-                old_att = attribute
-                attribute = random_str + attribute
-
-        if not self._is_find_by:
-            self._is_find_by = True
-
-        if isinstance(attribute_value, dict) or (
-            isinstance(attribute_value, list) and comparator != "BETWEEN"
-        ):
-            attribute_value = json.dumps(attribute_value)
-
-        filter_param = {f":{attribute}": attribute_value}
-        if comparator == "BETWEEN":
-            self._filter_expression += f"{use_and_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})"
-            filter_param = {
-                f":{attribute[0]}": attribute_value[0],
-                f":{attribute[1]}": attribute_value[1],
-            }
-        elif comparator == "begins_with":
-            self._filter_expression += (
-                f"{use_and_operator}({comparator}(#{attribute},:{attribute}))"
-            )
-        else:
-            self._filter_expression += (
-                f"{use_and_operator}(#{attribute} {comparator} :{attribute})"
-            )
-        self._filter_params.update(filter_param)
-        self._filter_params_name.update(
-            {f"#{attribute}": old_att if old_att else attribute}
-        )
-
-        return self
-
-    """
-    This function create a FilterExpression for a query operation
-    Args:
-    attributes (str): The specific attributes to return from table.
-
-    Returns:
-    self: The DynoLayer.
-    """
-
-    def filter(
-        self,
-        attribute: str,
-        comparator: Literal["=", "<>", "<", "<=", ">", ">=", "BETWEEN", "begins_with"],
-        attribute_value,
-        logical_operator: Literal["AND", "OR", "NOT"] = "",
-    ):
-        old_att = ""
-        if self._is_find_by:
-            if str(self._filter_params.get(f":{attribute}", "")):
-                letters = string.ascii_lowercase
-                random_str = ""
-                for i in range(4):
-                    random_str += random.choice(letters)
-                old_att = attribute
-                attribute = random_str + attribute
-
-        if isinstance(attribute_value, dict) or isinstance(attribute_value, list):
-            attribute_value = json.dumps(attribute_value)
-
-        if logical_operator:
-            logical_operator = f" {logical_operator} "
-        if comparator == "BETWEEN":
-            self._query_filter_expression += f"{logical_operator}(#{attribute} {comparator} :{attribute[0]} AND :{attribute[1]})"
-        elif comparator == "begins_with":
-            self._query_filter_expression += (
-                f"{logical_operator}({comparator}(#{attribute},:{attribute}))"
-            )
-        else:
-            self._query_filter_expression += (
-                f"{logical_operator}(#{attribute} {comparator} :{attribute})"
-            )
-        self._filter_params.update({f":{attribute}": attribute_value})
-        self._filter_params_name.update(
-            {f"#{attribute}": old_att if old_att else attribute}
-        )
-
-        return self
-
-    """
-    Args:
-    attributes (str): The specific attributes to return from table.
-
-    Returns:
-    self: The DynoLayer.
-    """
-
-    def attributes_to_get(self, attributes: str):
-        str_attributes_to_get = attributes
-        if self._is_find_by:
-            str_attributes_to_get = ""
-            for attr in attributes.split(","):
-                str_attributes_to_get += f"#{attr},"
-                self._filter_params_name.update({f"#{attr}": attr})
-
-            str_attributes_to_get = str_attributes_to_get[:-1]
-        self._attributes_to_get = str_attributes_to_get
-        return self
-
-    """
-    Args:
-    limit (int): The limit of records to return from table.
-
-    Returns:
-    self: The DynoLayer.
-    """
-
-    def limit(self, limit: int = 50):
-        self._limit = limit
-        return self
-
-    """
-    Returns:
-    int: The count of records retrieved from the table after an operation.
-    """
-
-    @property
-    def get_count(self) -> int:
-        return self._count
-
-    """
-    Returns:
-    int: The total count of records in the table.
-    """
-
-    def count(self):
-        self._fetch(just_count=True)
-        return self._count
-
-    """
-    Returns:
-    bool: Indicate if the operation must paginate in a last_evaluated_key.
-    """
-
-    def offset(self, last_evaluated_key):
-        self._last_evaluated_key = last_evaluated_key
-        self._offset = True
-        return self
-
-    def order(self, attribute: str, is_ascending: bool = True):
-        self._order_by = {"attribute": attribute, "is_ascending": is_ascending}
-        return self
-
-    """
-    Returns:
-    dict: The last record's key retrieved from the table.
-    """
-
-    @property
-    def last_evaluated_key(self) -> dict:
-        return self._last_evaluated_key
-
-    """
-    Args:
-    paginate_through_results (bool): Indicate if the result should be paginated.
-
-    Returns:
-    list: The record collection from table.
-    """
-
-    def fetch(self, paginate_through_results: bool = False, object=False):
-        return self._fetch(paginate_through_results, object=object)
-
-    def _fetch(
-        self, paginate_through_results: bool = False, just_count=False, object=False
-    ):
-        try:
-            scan_params = {
-                "TableName": self._entity,
-                "Limit": self._limit,
-            }
-
-            if just_count:
-                scan_params.update({"Select": "COUNT"})
-
-            if self._filter_expression:
-                filter_key = (
-                    "KeyConditionExpression"
-                    if self._is_query_operation
-                    else "FilterExpression"
-                )
-                scan_params.update({filter_key: self._filter_expression})
-                if self._query_filter_expression:
-                    if not scan_params.get("FilterExpression", None):
-                        scan_params["FilterExpression"] = ""
-                    scan_params["FilterExpression"] += self._query_filter_expression
-                scan_params.update({"ExpressionAttributeValues": self._filter_params})
-                scan_params.update(
-                    {"ExpressionAttributeNames": self._filter_params_name}
-                )
-
-            if self._attributes_to_get:
-                scan_params.update({"ProjectionExpression": self._attributes_to_get})
-
-            if self._secondary_index:
-                scan_params.update({"IndexName": self._secondary_index})
-
-            self._is_find_by = False  # return to default value
-            self._filter_expression = ""  # return to default value
-            self._filter_params = {}  # return to default value
-            self._filter_params_name = {}  # return to default value
-            if self._is_query_operation:
-                return self._order_response(
-                    self._fetch_query(scan_params, paginate_through_results),
-                    object=object,
-                )
-
-            return self._order_response(
-                self._fetch_scan(scan_params, paginate_through_results), object=object
-            )
-        except Exception as e:
-            self._error = str(e)
-            return None
-
-    """
-    Args:
-    partition_key (str): The table's partition Key.
-
-    Returns:
-    self: The founded record as DynoLayer.
-    """
-
-    def find_by_id(self, partition_key: str):
-        try:
-            response = self._table.get_item(
-                TableName=self._entity, Key={self._partition_key: partition_key}
-            )
-            for key, value in response["Item"].items():
-                if isinstance(value, Decimal):
-                    value = int(value)
-                setattr(self, key, value)
-            return self
-        except Exception as e:
-            self._error = str(e)
-            return None
-
-    """
-    Returns:
-    bool: True for successful put/update item. False if something went wrong.
-    """
-
-    def save(self) -> bool:
-        if not self._required():
-            self._error = "All required fields must be setted"
-            return False
-        # update
-        if self._data.get(self._partition_key):
-            partition_key = self._data.get(self._partition_key)
-            try:
-                update_expression = "SET"
-                expression_values = {}
-                expression_names = {}
-
-                for key, value in self._safe():
-                    update_expression += f" #{key} = :{key},"
-                    if isinstance(value, dict) or isinstance(value, list):
-                        value = json.dumps(value)
-                    expression_values[f":{key}"] = value
-                    expression_names[f"#{key}"] = key
-
-                update_expression = update_expression[:-1]
-
-                self._table.update_item(
-                    Key={self._partition_key: partition_key},
-                    UpdateExpression=update_expression,
-                    ExpressionAttributeValues=expression_values,
-                    ExpressionAttributeNames=expression_names,
-                    ReturnValues="ALL_NEW",
-                )
-                return True
-            except Exception as e:
-                self._error = str(e)
-                return False
-
-        # create
-        try:
-            data = {self._partition_key: str(uuid.uuid4())}
-
-            for key, value in self._safe():
-                if isinstance(value, dict) or isinstance(value, list):
-                    value = json.dumps(value)
-                data[key] = value
-
-            self._table.put_item(Item=data)
-            self._data[self._partition_key] = data[self._partition_key]
-            return True
-        except Exception as e:
-            self._error = str(e)
-            return False
-
-    """
-    Returns:
-    bool: True for successful delete item. False if the record does not exist.
-    """
-
-    def destroy(self) -> bool:
-        partition_key = self._data.get(self._partition_key, None)
-
-        if not partition_key:
-            return False
-
-        try:
-            self._table.delete_item(
-                TableName=self._entity, Key={self._partition_key: partition_key}
-            )
-            return True
-        except Exception as e:
-            self._error = str(e)
-            return False
-
-    """
-    Returns:
-    str: Return the error occurred during an operation.
-    """
-
-    @property
-    def error(self) -> str:
-        return self._error
-
-    """
-    Returns:
-    dict_items: The _data items without the partition key.
-    """
-
-    def _safe(self):
-        if self._timestamps:
-            zone = os.environ.get("TIMESTAMP_TIMEZONE", "America/Sao_Paulo")
-            timezone = pytz.timezone(zone)
-            current_date = datetime.now(timezone)
-            if not self._data.get("created_at", None):
-                self._data["created_at"] = int(current_date.timestamp())
-            self._data["updated_at"] = int(current_date.timestamp())
-
-        safe = list(self._data.items())
-        for item in safe:
-            if self._partition_key in item:
-                safe.remove(item)
-                break
-        return dict(safe).items()
-
-    """
-    Returns:
-    bool: True if the required fields are satisfied.
-    """
-
-    def _required(self):
-        required = True
-        if len(self._required_fields) == 0:
-            return required
-        for key, _ in self._data.items():
-            if key not in self._required_fields:
-                required = False
-            else:
-                required = True
-                break
-        return required
-
-    def _fetch_scan(self, scan_params: dict, paginate_through_results: bool):
-        response = None
-        data = []
-
-        if self._offset:
-            scan_params.update({"ExclusiveStartKey": self._last_evaluated_key})
-            response = self._table.scan(**scan_params)
-            data = response.get("Items", None)
-            self._count = response["Count"]
-        else:
-            response = self._table.scan(**scan_params)
-            data = response.get("Items", None)
-            self._count = response["Count"]
-
-        self._last_evaluated_key = response.get("LastEvaluatedKey", None)
-
-        if paginate_through_results:
-            while "LastEvaluatedKey" in response:
-                scan_params.update({"ExclusiveStartKey": response["LastEvaluatedKey"]})
-                response = self._table.scan(**scan_params)
-                data.extend(response.get("Items", None))
-                self._count += response["Count"]
-                if response.get("LastEvaluatedKey", None):
-                    self._last_evaluated_key = response["LastEvaluatedKey"]
-
-        return data
-
-    def _fetch_query(self, scan_params: dict, paginate_through_results: bool):
-        response = None
-        data = []
-
-        if self._offset:
-            scan_params.update({"ExclusiveStartKey": self._last_evaluated_key})
-            response = self._table.query(**scan_params)
-            data = response.get("Items", None)
-            self._count = response["Count"]
-        else:
-            response = self._table.query(**scan_params)
-            data = response.get("Items", None)
-            self._count = response["Count"]
-
-        self._last_evaluated_key = response.get("LastEvaluatedKey", None)
-
-        if paginate_through_results:
-            while "LastEvaluatedKey" in response:
-                scan_params.update({"ExclusiveStartKey": response["LastEvaluatedKey"]})
-                response = self._table.query(**scan_params)
-                data.extend(response.get("Items", None))
-                self._count += response["Count"]
-                if response.get("LastEvaluatedKey", None):
-                    self._last_evaluated_key = response["LastEvaluatedKey"]
-
-        return data
 
     def data(self):
         return self._data
 
-    """
-    Args:
-    response (list): The response to order.
+    def fillable(self):
+        return self._fillable
 
-    Returns:
-    list: The ordered filtered or not.
-    """
+    def __getattr__(self, item):
+        return self._data.get(item)
 
-    def _order_response(self, response, object=False):
-        if not response or len(response) == 0:
-            return response
+    def __setattr__(self, key, value):
+        if key.startswith("_"):
+            super().__setattr__(key, value)
+        else:
+            self._data[key] = value
 
-        if self._order_by:
-            response = sorted(
-                response,
-                key=lambda d: d[self._order_by.get("attribute")],
-                reverse=not self._order_by.get("is_ascending"),
-            )
+    @classmethod
+    def all(cls):
+        instance = cls()
 
-        for item in response:
-            for key, value in item.items():
-                if isinstance(value, Decimal):
-                    item[key] = int(value)
+        response = instance._table.scan()
+        data = response["Items"]
 
-        transformed_response = []
-        if object:
-            for item in response:
-                transformed_response.append(self._transform_into_layer(item))
-            return transformed_response
+        while "LastEvaluatedKey" in response:
+            response = instance._table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+            data.extend(response["Items"])
+
+        return data
+
+    @classmethod
+    def find(cls, key: dict):
+        instance = cls()
+        response = instance._table.get_item(
+            TableName=instance._entity,
+            Key=key
+        )
+
+        if not response.get("Item"):
+            return None
+
+        for key, value in response["Item"].items():
+            instance._data[key] = value
+
+        return instance
+
+    @classmethod
+    def where(cls, *args):
+        instance = cls()
+        instance.and_where(*args)
+
+        return instance
+
+    @classmethod
+    def destroy(cls, key: dict):
+        instance = cls()
+        return instance._delete(key)
+
+    @classmethod
+    def create(cls, data: Dict):
+        instance = cls()
+
+        for key, value in data.items():
+            if key in instance.fillable():
+                instance._data[key] = value
+
+        instance.__validate_required_fields()
+
+        if instance._timestamps:
+            instance._data["created_at"] = instance._get_current_timestamp()
+            instance._data["updated_at"] = instance._get_current_timestamp()
+
+        instance._put(instance.__safe())
+
+        return instance
+
+    def save(self):
+        partition_keys = [*self._partition_keys, *self._indexes]
+        partition_keys = list(set(partition_keys))
+        self.__validate_required_fields(partition_keys)
+        keys = {key: self.data()[key] for key in partition_keys}
+
+        if self._timestamps:
+            self._data["created_at"] = self._data["created_at"] if self._data.get(
+                "created_at") else self._get_current_timestamp()
+            self._data["updated_at"] = self._get_current_timestamp()
+
+        return self._update(self.__safe(partition_keys), keys)
+
+    def delete(self):
+        keys = {key: self.data()[key] for key in self._partition_keys}
+        return self._delete(keys)
+
+    def and_where(self, *args):
+        attribute, condition, value = extract_params(*args)
+        self.__set_filter_expression(attribute, condition, value, "AND")
+
+        return self
+
+    def where_between(self, attribute: str, start: Any, end: Any):
+        self.__set_filter_expression(attribute, "between", [start, end], "AND")
+        return self
+
+    def where_in(self, attribute: str, values_in: List[str | int]):
+        self.__set_filter_expression(attribute, "in", values_in, "AND")
+        return self
+
+    def or_where(self, *args):
+        attribute, condition, value = extract_params(*args)
+        self.__set_filter_expression(attribute, condition, value, "OR")
+
+        return self
+
+    def where_not(self, *args):
+        attribute, condition, value = extract_params(*args)
+        self.__set_filter_expression(attribute, condition, value, "AND_NOT")
+
+        return self
+
+    def or_where_not(self, *args):
+        attribute, condition, value = extract_params(*args)
+        self.__set_filter_expression(attribute, condition, value, "OR_NOT")
+
+        return self
+
+    def limit(self, limit: int):
+        self._limit = limit
+        return self
+
+    def attributes_to_get(self, project_expression: str | List[str]):
+        if isinstance(project_expression, list):
+            self._project_expression = ", ".join(project_expression)
+
+        if isinstance(project_expression, str):
+            self._project_expression = project_expression
+
+        return self
+
+    def index(self, index: str):
+        self._index = index
+        return self
+
+    def get(self, return_all=False):
+        if not self._filter_expression:
+            raise Exception("You must specify a filter condition before execute this operation.")
+
+        filter_expression = transform_params_in_filter(self._filter_expression)
+
+        response = self._scan(filter_expression, self._limit, return_all)
+        self.__reset_query_builder()
 
         return response
+
+    def fetch(self, return_all=False):
+        if not self._key_condition_expression:
+            self.get(return_all)
+
+        filter_expression = None
+        if self._filter_expression:
+            filter_expression = transform_params_in_filter(self._filter_expression)
+
+        key_condition = transform_params_in_query(self._key_condition_expression)
+        response = self._query(key_condition, filter_expression, self._index, self._limit, return_all)
+        self.__reset_query_builder()
+
+        return response
+
+    def __validate_required_fields(self, custom_data: List[str] = None):
+        if custom_data and len(custom_data) > 0:
+            required = custom_data
+        else:
+            required = self._required_fields
+
+        for field in required:
+            if field not in self._data:
+                raise Exception(f"Field '{field}' is required but missing.")
+
+    def __safe(self, unset_keys=None):
+        data = self._data.copy()
+
+        if unset_keys and isinstance(unset_keys, list):
+            for key in unset_keys:
+                del data[key]
+
+        for key, value in data.items():
+            if isinstance(value, float):
+                data[key] = Decimal(str(value))
+
+        return data
+
+    def __set_filter_expression(self, attribute: str, condition: str, value:  str | int | List[str | int] | None,
+                                filter_operator: Literal["AND", "OR", "AND_NOT", "OR_NOT"]):
+        keys = [*self._partition_keys, *self._indexes]
+        keys = list(set(keys))
+        if attribute in keys:
+            self._key_condition_expression.append({attribute: (condition, value)})
+        else:
+            self._filter_expression.append({filter_operator: {attribute: (condition, value)}})
+
+    def __reset_query_builder(self):
+        self._limit = None
+        self._key_condition_expression = list()
+        self._filter_expression = list()

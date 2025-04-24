@@ -1,183 +1,109 @@
-import boto3
 import pytest
-from moto import mock_aws
-
-from dynolayer.dynolayer import DynoLayer
 
 
-def create_table():
-    table_name = "users"
-    dynamodb = boto3.resource("dynamodb", region_name="sa-east-1")
-    response = dynamodb.create_table(
-        TableName=table_name,
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[
-            {"AttributeName": "id", "AttributeType": "S"},
-            {"AttributeName": "role", "AttributeType": "S"},
-        ],
-        ProvisionedThroughput={"ReadCapacityUnits": 10, "WriteCapacityUnits": 10},
-        GlobalSecondaryIndexes=[
-            {
-                "IndexName": "role-index",
-                "KeySchema": [{"AttributeName": "role", "KeyType": "HASH"}],
-                "Projection": {"ProjectionType": "ALL"},
-            }
-        ],
-    )
-    return response
+class TestRetrieveRecords:
+    # This method executes a scan in all table
+    def test_with_all_method(self, get_user, create_table, aws_mock, save_records):
+        response = get_user.all()
+        assert len(response) == 20
 
-
-def save_record():
-    table_name = "users"
-    dynamodb = boto3.resource("dynamodb", region_name="sa-east-1")
-    dynamodb.Table(table_name).put_item(
-        Item={
-            "id": "123456",
-            "first_name": "John",
-            "last_name": "Doe",
+    # Find a record with the primary key
+    def test_with_find_method(self, get_user, create_table, aws_mock):
+        get_user.create({
+            "id": 999,
+            "first_name": "Joanne",
+            "email": "joanne@email.com",
             "role": "admin",
-            "stars": 5,
-        }
-    )
-    dynamodb.Table(table_name).put_item(
-        Item={
-            "id": "567890",
-            "first_name": "Elton",
-            "last_name": "Moon",
-            "role": "common",
-            "stars": 11,
-        }
-    )
-    dynamodb.Table(table_name).put_item(
-        Item={
-            "id": "308789",
-            "first_name": "Anna",
-            "last_name": "Luh",
+        })
+        user = get_user.find({"id": 999, "role": "admin"})
+
+        assert isinstance(user, get_user)
+        assert user.id == 999
+
+
+class TestQueryBuilder:
+    def test_with_where_method(self, get_user, create_table, aws_mock, save_records):
+        get_user.create({
+            "id": 100,
+            "role": "moderator",
+            "first_name": "Jack",
+            "email": "jack@mail.com",
+            "stars": 4
+        })
+        moderators_with_more_than_3_stars = (get_user.where("stars", ">", 2)
+                                             .and_where("stars", "<", 5)
+                                             .and_where("role", "moderator")
+                                             .index("role-index")
+                                             .fetch())
+
+        assert isinstance(moderators_with_more_than_3_stars, list)
+        assert moderators_with_more_than_3_stars[0]["role"] == "moderator"
+        assert moderators_with_more_than_3_stars[0]["stars"] > 2
+        assert moderators_with_more_than_3_stars[0]["stars"] < 5
+
+    def test_with_or_where_method(self, get_user, create_table, aws_mock, save_records):
+        get_user.create({
+            "id": 100,
+            "role": "moderator",
+            "first_name": "Jack",
+            "email": "jack@mail.com",
+            "stars": 4.5
+        })
+        user_with_stars_between_2_and_3 = (get_user.where("stars", ">=", 2)
+                                           .and_where("stars", "<=", 3)
+                                           .or_where("email", "jack@mail.com")
+                                           .get())
+
+        assert isinstance(user_with_stars_between_2_and_3, list)
+        assert user_with_stars_between_2_and_3[0]["stars"] >= 2
+
+    def test_with_where_between_method(self, get_user, create_table, aws_mock, save_records):
+        from datetime import datetime, timedelta, timezone
+
+        get_user.create({
+            "id": 123,
             "role": "admin",
-            "stars": 52,
-        }
-    )
+            "first_name": "Luke",
+            "email": "luke@mail.com",
+        })
+        timestamp_yesterday = int((datetime.now(timezone.utc) - timedelta(days=1)).timestamp())
+        timestamp_today = int(datetime.now(timezone.utc).timestamp())
+        admins_created_between_yesterday_and_today = (get_user.where("role", "admin")
+                        .where_between("created_at", timestamp_yesterday, timestamp_today)
+                        .index("role-index")
+                        .fetch())
 
+        assert isinstance(admins_created_between_yesterday_and_today, list)
+        assert len(admins_created_between_yesterday_and_today) == 1
+        assert admins_created_between_yesterday_and_today[0]["first_name"] == "Luke"
 
-class User(DynoLayer):
-    def __init__(self) -> None:
-        super().__init__("users", [])
+    def test_with_where_in_method(self, get_user, create_table, aws_mock, save_records):
+        admins = (get_user.where("role", "admin")
+                        .where_in("stars", [2, 3, 5])
+                        .index("role-index")
+                        .fetch())
 
+        assert isinstance(admins, list)
 
-@mock_aws
-def test_it_should_find_a_record_by_id():
-    create_table()
-    save_record()
-    user = User()
-    response = user.find_by_id("123456")
-    data = response.data()
-    assert response
-    assert data.get("id") == "123456"
+    def test_with_where_not_method(self, get_user, create_table, aws_mock, save_records):
+        admins = get_user().where_not("stars", "in", [3, 4, 5]).get()
 
+        assert isinstance(admins, list)
 
-@mock_aws
-def test_it_should_find_a_collection_of_records():
-    create_table()
-    save_record()
-    user = User()
-    response = user.find().limit(2).fetch()
-    assert user.get_count == 2
-    assert response
+    def test_with_begins_with(self, get_user, create_table, aws_mock, save_records):
+        get_user.create({
+            "id": 934,
+            "role": "admin",
+            "first_name": "Harry",
+            "email": "potter.harry@mail.com",
+        })
+        potter_heads = (get_user.where("role", "admin")
+         .and_where("email", "begins_with","potter")
+         .index("role-email-index")
+         .fetch())
 
-
-@mock_aws
-def test_it_should_find_a_collection_of_records_by_filter():
-    create_table()
-    save_record()
-    user = User()
-    # adicionar propriedade com nome reservado pelo DynamoDB
-    user.id = "123456"
-    user.name = "Messi"
-    user.save()
-
-    response = (
-        user.find("#fn = :fn", {":fn": "John"}, {"#fn": "first_name", "#name": "name"})
-        .attributes_to_get("last_name,stars,#name")
-        .fetch(object=True)
-    )
-    assert user.get_count == 1
-    assert "first_name" not in response[0].data()
-    assert response[0].data().get("last_name", None)
-    assert response[0].data().get("stars", None)
-
-    response_find_by = (
-        user.find_by("first_name", "=", "John")
-        .attributes_to_get("last_name,stars,name")
-        .fetch(object=True)
-    )
-    assert user.get_count == 1
-    assert "first_name" not in response_find_by[0].data()
-    assert response_find_by[0].data().get("last_name", None)
-    assert response_find_by[0].data().get("stars", None)
-
-    # response_by_id = user.find_by_id('123456').attributes_to_get('name').fetch(object=True)
-    # assert response_find_by
-
-
-@mock_aws
-def test_it_should_paginate():
-    create_table()
-    save_record()
-
-    limit = 1
-    user = User()
-
-    user.find().fetch(paginate_through_results=True, object=True)
-    total_count = user.get_count
-
-    search = user.find().limit(limit)
-
-    last_evaluated_key = {"id": "123456"}
-    if last_evaluated_key:
-        search = search.offset(last_evaluated_key)
-
-    results = search.fetch(object=True)
-    results_count = user.get_count
-
-    assert total_count == 3
-    assert results
-    assert results_count == limit
-    assert user.last_evaluated_key != {"id": "123456"}
-
-
-@mock_aws
-def test_it_should_fetch_records_ordered():
-    create_table()
-    save_record()
-    user = User()
-    response_ascending = user.find().order("first_name").fetch(object=True)
-    assert response_ascending[0].data().get("first_name", None) == "Anna"
-    assert response_ascending[2].data().get("first_name", None) == "John"
-    response_descending = user.find().order("first_name", False).fetch(object=True)
-    assert response_descending[0].data().get("first_name", None) == "John"
-    assert response_descending[2].data().get("first_name", None) == "Anna"
-
-
-@mock_aws
-def test_it_should_return_the_items_count():
-    create_table()
-    save_record()
-    user = User()
-    total_count = user.find().count()
-    assert total_count == 3
-
-
-@mock_aws
-def test_it_should_return_the_items_with_and_operator():
-    create_table()
-    save_record()
-    user = User()
-    total_count = user.find_by("stars", ">", 10).find_by("role", "<>", "admin").count()
-    assert total_count == 1
-
-    users = user.find_by("stars", "BETWEEN", [10, 60])
-    users = users.fetch()
-    assert len(users) == 2
+        assert isinstance(potter_heads, list)
+        assert potter_heads[0]["first_name"] == "Harry"
 
 
 if __name__ == "__main__":

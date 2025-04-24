@@ -1,105 +1,53 @@
-import os
-
-import boto3
 import pytest
-from moto import mock_aws
-
-from dynolayer.dynolayer import DynoLayer
 
 
-def create_table():
-    table_name = "users"
-    dynamodb = boto3.resource("dynamodb", region_name="sa-east-1")
-    response = dynamodb.create_table(
-        TableName=table_name,
-        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
-        ProvisionedThroughput={"ReadCapacityUnits": 10, "WriteCapacityUnits": 10},
-    )
-    return response
-
-
-def save_record():
-    table_name = "users"
-    dynamodb = boto3.resource("dynamodb", region_name="sa-east-1")
-    dynamodb.Table(table_name).put_item(
-        Item={
-            "id": "123456",
+class TestCreateRecord:
+    def test_with_create_method(self, get_user, create_table, aws_mock):
+        input_user_data = {
+            "id": 1,
             "first_name": "John",
             "last_name": "Doe",
-            "stars": 5,
+            "email": "john@mail.com",
+            "role": "common",
+            "stars": 3.5,
+            "stats": {
+                "wins": 32,
+                "loss": 7,
+            },
+            "phones": [
+                "11 91234-5678",
+                "10 95678-1234",
+            ],
+            "this_will_not_be_added": "it will be skipped"
         }
-    )
-    dynamodb.Table(table_name).put_item(
-        Item={
-            "id": "567890",
-            "first_name": "Elton",
-            "last_name": "Moon",
-            "stars": 11,
-        }
-    )
-    dynamodb.Table(table_name).put_item(
-        Item={
-            "id": "308789",
-            "first_name": "Anna",
-            "last_name": "Luh",
-            "stars": 52,
-        }
-    )
+
+        created_user = get_user.create(input_user_data)
+        assert created_user.id == 1
+
+    def test_with_save_method(self, get_user, create_table, aws_mock):
+        user = get_user()
+        user.id = 100
+        user.first_name = "Joanne"
+        user.email = "joanne@email.com"
+        user.role = "admin"
+
+        assert user.save()
 
 
-class User(DynoLayer):
-    def __init__(self) -> None:
-        super().__init__("users", ["first_name"])
+class TestUpdateRecord:
+    def test_with_save_method(self, get_user, create_table, aws_mock):
+        user_to_update = get_user.create({
+            "id": 999,
+            "first_name": "Joanne",
+            "email": "joanne@email.com",
+            "role": "admin",
+        })
 
+        user_to_update.first_name = "John"
+        user_to_update.save()
 
-@mock_aws
-def test_it_should_create_a_record():
-    create_table()
-    user = User()
-    user.first_name = "John"
-    user.last_name = "Doe"
-    user.email = "john@mail.com"
-    user.stars = 5
-    user.stats = {
-        "wins": 32,
-        "loss": 7,
-    }
-    user.phones = [
-        "11 91234-5678",
-        "10 95678-1234",
-    ]
-    os.environ["TIMESTAMP_TIMEZONE"] = "US/Pacific"
-    assert user.save()
-    assert user.id
-
-
-@mock_aws
-def test_it_should_not_create_a_record():
-    create_table()
-    user = User()
-    user.last_name = "Doe"
-    user.email = "john@mail.com"
-    user.stars = 5
-    user.stats = {
-        "wins": 32,
-        "loss": 7,
-    }
-    user.phones = [
-        "11 91234-5678",
-        "10 95678-1234",
-    ]
-    assert not user.save()
-    assert user.error == "All required fields must be setted"
-
-
-@mock_aws
-def test_it_should_update_a_record():
-    create_table()
-    save_record()
-    user = User().find_by_id("123456")
-    user.first_name = "Messi"
-    assert user.save()
+        assert user_to_update.id == 999
+        assert user_to_update.first_name == "John"
 
 
 if __name__ == "__main__":
