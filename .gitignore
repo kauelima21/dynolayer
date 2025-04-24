@@ -8,3 +8,4 @@ dynolayer/**/__pycache__
 tests/**/__pycache__
 dist
 dynolayer.egg-info
+build
