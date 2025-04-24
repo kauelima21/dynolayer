@@ -1,16 +1,14 @@
-from setuptools import setup, find_packages
-
+from setuptools import setup
 
 with open('README.md', 'r') as file:
     readme = file.read()
 
-
 setup(
     name='dynolayer',
-    version='0.4.2',
+    version='0.5.0',
     license='MIT License',
     packages=['dynolayer'],
-    install_requires=['boto3', 'pytz', 'python-dotenv'],
+    install_requires=['boto3', 'pytz'],
     keywords=['dynolayer', 'dynamodb', 'active record', 'aws lambda'],
     author='Kauê Leal de Lima',
     author_email='kaueslim@gmail.com',
