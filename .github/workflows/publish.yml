@@ -1,0 +1,50 @@
+name: Manual Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: ''
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish optimized package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Clean old builds
+        run: |
+          rm -rf dist build *.egg-info
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+#      - name: Compile to .pyc and remove .py
+#        run: |
+#          python -m compileall dynolayer
+#          find dynolayer -name "*.py" -type f -delete
+
+      - name: Build package
+        run: python -m build
+
+      - name: Show wheel size (info)
+        run: du -h dist/*.whl
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
