@@ -17,3 +17,5 @@ pip install dynolayer[aws]
 ```
 
 para instalar com o boto3
+
+Documentação: https://dynolayer.kaueleal.dev
