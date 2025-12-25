@@ -34,10 +34,10 @@ class CrudMixin:
 
         indexes = list()
         primary_keys = [attr["AttributeName"] for attr in table_description["KeySchema"]]
-        for index in table_description.get("GlobalSecondaryIndexes"):
+        for index in table_description.get("GlobalSecondaryIndexes", []):
             indexes.extend([attr["AttributeName"] for attr in index["KeySchema"]])
 
-        for index in table_description.get("LocalSecondaryIndexes"):
+        for index in table_description.get("LocalSecondaryIndexes", []):
             indexes.extend([attr["AttributeName"] for attr in index["KeySchema"]])
 
         return primary_keys, indexes
