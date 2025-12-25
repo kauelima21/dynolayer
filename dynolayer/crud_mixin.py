@@ -74,7 +74,8 @@ class CrudMixin:
 
         return True
 
-    def _query(self, key_condition: str, filter_expression=None, index=None, limit=None, return_all=False):
+    def _query(self, key_condition: str, filter_expression=None, index=None,
+               limit=None, return_all=False, pe=None):
         query_attributes = {"KeyConditionExpression": key_condition}
 
         if filter_expression:
@@ -86,6 +87,9 @@ class CrudMixin:
         if index:
             query_attributes["IndexName"] = index
 
+        if pe:
+            query_attributes["ProjectionExpression"] = pe
+
         response = self._table.query(**query_attributes)
         data = response["Items"]
         if return_all:
@@ -96,18 +100,21 @@ class CrudMixin:
 
         return data
 
-    def _scan(self, filter_expression: str, limit=None, return_all=False):
+    def _scan(self, filter_expression: str, limit=None, return_all=False, pe=None):
         scan_attributes = {"FilterExpression": filter_expression}
 
         if limit:
             scan_attributes["Limit"] = limit
+
+        if pe:
+            scan_attributes["ProjectionExpression"] = pe
 
         response = self._table.scan(**scan_attributes)
         data = response["Items"]
         if return_all:
             while "LastEvaluatedKey" in response:
                 scan_attributes["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-                response = self._table.query(**scan_attributes)
+                response = self._table.scan(**scan_attributes)
                 data.extend(response["Items"])
 
         return data

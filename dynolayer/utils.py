@@ -3,6 +3,30 @@ from typing import Dict, Tuple, Literal, Union, List
 from boto3.dynamodb.conditions import Attr, Key, ConditionBase
 
 
+# Collection class for model instances
+class Collection:
+    def __init__(self, items):
+        self._items = items
+
+    def first(self):
+        return self._items[0] if self._items else None
+
+    def count(self):
+        return len(self._items)
+
+    def pluck(self, key):
+        return [item.data().get(key) for item in self._items]
+
+    def to_list(self):
+        return [item.data() for item in self._items]
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __len__(self):
+        return len(self._items)
+
+
 def extract_params(*args):
     if len(args) == 2:
         attribute, value = args

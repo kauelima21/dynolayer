@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import List, Dict, Literal, Any
 
 from dynolayer.crud_mixin import CrudMixin
-from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter
+from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
 
 
 class DynoLayer(CrudMixin):
@@ -24,6 +24,7 @@ class DynoLayer(CrudMixin):
         self._project_expression = None
         self._filter_expression = list()
         self._key_condition_expression = list()
+        self._force_scan = False
 
         self._data = {}
 
@@ -45,15 +46,18 @@ class DynoLayer(CrudMixin):
     @classmethod
     def all(cls):
         instance = cls()
-
         response = instance._table.scan()
         data = response["Items"]
-
         while "LastEvaluatedKey" in response:
             response = instance._table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
             data.extend(response["Items"])
-
-        return data
+        # Convert list of dicts to Collection of model instances
+        items = []
+        for row in data:
+            model_instance = cls()
+            model_instance._data = row.copy()
+            items.append(model_instance)
+        return Collection(items)
 
     @classmethod
     def find(cls, key: dict):
@@ -167,30 +171,48 @@ class DynoLayer(CrudMixin):
         self._index = index
         return self
 
+    def force_scan(self):
+        self._force_scan = True
+        return self
+
     def get(self, return_all=False):
-        if not self._filter_expression:
+        if not self._filter_expression and not self._key_condition_expression:
             raise Exception("You must specify a filter condition before execute this operation.")
-
-        filter_expression = transform_params_in_filter(self._filter_expression)
-
-        response = self._scan(filter_expression, self._limit, return_all)
-        self.__reset_query_builder()
-
-        return response
-
-    def fetch(self, return_all=False):
-        if not self._key_condition_expression:
-            self.get(return_all)
 
         filter_expression = None
         if self._filter_expression:
             filter_expression = transform_params_in_filter(self._filter_expression)
 
-        key_condition = transform_params_in_query(self._key_condition_expression)
-        response = self._query(key_condition, filter_expression, self._index, self._limit, return_all)
-        self.__reset_query_builder()
+        items = []
+        if self._key_condition_expression and not self._force_scan:
+            key_condition = transform_params_in_query(self._key_condition_expression)
+            response = self._query(key_condition, filter_expression, self._index, self._limit, return_all, self._project_expression)
+            for row in response:
+                model_instance = self.__class__()
+                model_instance._data = row.copy()
+                items.append(model_instance)
+        else:
+            response = self._scan(filter_expression, self._limit, return_all, self._project_expression)
+            for row in response:
+                model_instance = self.__class__()
+                model_instance._data = row.copy()
+                items.append(model_instance)
 
-        return response
+        self.__reset_query_builder()
+        return Collection(items)
+
+    def fetch(self, return_all=False):
+        return self.get(return_all)
+
+    @classmethod
+    def find_or_fail(cls, key: dict, message="Record not found."):
+        """
+        Finds a model by key or raises an Exception if not found.
+        """
+        instance = cls.find(key)
+        if instance is None:
+            raise Exception(message)
+        return instance
 
     def __validate_required_fields(self, custom_data: List[str] = None):
         if custom_data and len(custom_data) > 0:
@@ -215,7 +237,7 @@ class DynoLayer(CrudMixin):
 
         return data
 
-    def __set_filter_expression(self, attribute: str, condition: str, value:  str | int | List[str | int] | None,
+    def __set_filter_expression(self, attribute: str, condition: str, value: str | int | List[str | int] | None,
                                 filter_operator: Literal["AND", "OR", "AND_NOT", "OR_NOT"]):
         keys = [*self._partition_keys, *self._indexes]
         keys = list(set(keys))
@@ -228,3 +250,4 @@ class DynoLayer(CrudMixin):
         self._limit = None
         self._key_condition_expression = list()
         self._filter_expression = list()
+        self._force_scan = False
