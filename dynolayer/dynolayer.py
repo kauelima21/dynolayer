@@ -32,14 +32,20 @@ class DynoLayer(CrudMixin):
         self._data = {}
 
         # Pagination metadata
-        self.last_evaluated_key = None
-        self.get_count = 0
+        self._last_evaluated_key = None
+        self._get_count = 0
 
     def data(self):
         return self._data
 
     def fillable(self):
         return self._fillable
+
+    def last_evaluated_key(self):
+        return self._last_evaluated_key
+
+    def get_count(self):
+        return self._get_count
 
     def __getattr__(self, item):
         return self._data.get(item)
@@ -211,8 +217,8 @@ class DynoLayer(CrudMixin):
         self.__reset_query_builder()
 
         # Set pagination metadata AFTER reset
-        self.last_evaluated_key = last_key
-        self.get_count = count
+        self._last_evaluated_key = last_key
+        self._get_count = count
 
         return Collection(items)
 

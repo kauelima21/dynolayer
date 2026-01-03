@@ -11,8 +11,8 @@ class TestPaginationMetadata:
         result = query.get()
 
         assert isinstance(result, Collection)
-        assert query.last_evaluated_key is not None
-        assert isinstance(query.last_evaluated_key, dict)
+        assert query.last_evaluated_key() is not None
+        assert isinstance(query.last_evaluated_key(), dict)
 
     def test_last_evaluated_key_is_none_when_all_returned(self, get_user, create_table, aws_mock, save_records):
         """Test that last_evaluated_key is None when all results are returned"""
@@ -20,7 +20,7 @@ class TestPaginationMetadata:
         result = query.get(return_all=True)
 
         assert isinstance(result, Collection)
-        assert query.last_evaluated_key is None
+        assert query.last_evaluated_key() is None
 
     def test_get_count_reflects_returned_items(self, get_user, create_table, aws_mock, save_records):
         """Test that get_count reflects the number of items returned in the current page"""
@@ -28,7 +28,7 @@ class TestPaginationMetadata:
         result = query.get()
 
         assert isinstance(result, Collection)
-        assert query.get_count == 10
+        assert query.get_count() == 10
         assert result.count() == 10
 
     def test_get_count_with_return_all(self, get_user, create_table, aws_mock, save_records):
@@ -37,7 +37,7 @@ class TestPaginationMetadata:
         result = query.get(return_all=True)
 
         assert isinstance(result, Collection)
-        assert query.get_count == 20
+        assert query.get_count() == 20
         assert result.count() == 20
 
 
@@ -50,7 +50,7 @@ class TestOffsetMethod:
         query1 = get_user().all().limit(5)
         first_page = query1.get()
         first_page_ids = first_page.pluck("id")
-        last_key = query1.last_evaluated_key
+        last_key = query1.last_evaluated_key()
 
         assert last_key is not None
         assert len(first_page_ids) == 5
@@ -75,14 +75,14 @@ class TestOffsetMethod:
             .get()
         )
 
-        if user1.last_evaluated_key is not None:
+        if user1.last_evaluated_key() is not None:
             # Get second page using offset
             user2 = get_user()
             second_page = (
                 user2.where("role", "admin")
                 .index("role-index")
                 .limit(2)
-                .offset(user1.last_evaluated_key)
+                .offset(user1.last_evaluated_key())
                 .get()
             )
 
@@ -149,8 +149,8 @@ class TestManualPaginationWorkflow:
         results = query.fetch()
 
         # Get result count and next page token
-        results_count = query.get_count
-        next_key = query.last_evaluated_key
+        results_count = query.get_count()
+        next_key = query.last_evaluated_key()
 
         # Verify pagination data
         assert isinstance(results, Collection)
@@ -186,7 +186,7 @@ class TestManualPaginationWorkflow:
             results = query.fetch()
             all_ids.extend(results.pluck("id"))
 
-            last_evaluated_key = query.last_evaluated_key
+            last_evaluated_key = query.last_evaluated_key()
 
             # Break if no more pages
             if last_evaluated_key is None:

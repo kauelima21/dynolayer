@@ -271,8 +271,8 @@ if last_evaluated_key:
 results = query.fetch()
 
 # Get pagination data
-next_key = User().last_evaluated_key
-count = User().get_count
+next_key = User().last_evaluated_key()
+count = User().get_count()
 ```
 
 ### Method Overriding

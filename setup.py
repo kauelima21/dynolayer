@@ -5,7 +5,7 @@ with open('README.md', 'r') as file:
 
 setup(
     name='dynolayer',
-    version='0.7.0',
+    version='0.7.1',
     license='MIT License',
     packages=['dynolayer'],
     install_requires=['pytz'],

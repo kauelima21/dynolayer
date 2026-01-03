@@ -83,8 +83,8 @@ if last_evaluated_key:
 results = query.fetch()
 
 # Get result count and next page token
-results_count = user.get_count
-next_key = user.last_evaluated_key
+results_count = user.get_count()
+next_key = user.last_evaluated_key()
 
 # Build API response
 response = {
@@ -99,8 +99,8 @@ response = {
 
 After executing a query, access pagination data:
 
-- `user.last_evaluated_key`: DynamoDB's pagination token (keys of last item)
-- `user.get_count`: Number of items returned in this page
+- `user.last_evaluated_key()`: DynamoDB's pagination token (keys of last item)
+- `user.get_count()`: Number of items returned in this page
 
 ## Method Overriding (Polymorphism)
 
