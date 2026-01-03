@@ -3,6 +3,7 @@ from typing import List, Dict, Literal, Any
 
 from dynolayer.crud_mixin import CrudMixin
 from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
+from dynolayer.exceptions import QueryException, ValidationException, RecordNotFoundException
 
 
 class DynoLayer(CrudMixin):
@@ -25,8 +26,14 @@ class DynoLayer(CrudMixin):
         self._filter_expression = list()
         self._key_condition_expression = list()
         self._force_scan = False
+        self._offset = None
+        self._scan_all = False
 
         self._data = {}
+
+        # Pagination metadata
+        self.last_evaluated_key = None
+        self.get_count = 0
 
     def data(self):
         return self._data
@@ -46,18 +53,8 @@ class DynoLayer(CrudMixin):
     @classmethod
     def all(cls):
         instance = cls()
-        response = instance._table.scan()
-        data = response["Items"]
-        while "LastEvaluatedKey" in response:
-            response = instance._table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-            data.extend(response["Items"])
-        # Convert list of dicts to Collection of model instances
-        items = []
-        for row in data:
-            model_instance = cls()
-            model_instance._data = row.copy()
-            items.append(model_instance)
-        return Collection(items)
+        instance._scan_all = True
+        return instance
 
     @classmethod
     def find(cls, key: dict):
@@ -106,17 +103,15 @@ class DynoLayer(CrudMixin):
         return instance
 
     def save(self):
-        partition_keys = [*self._partition_keys, *self._indexes]
-        partition_keys = list(set(partition_keys))
-        self.__validate_required_fields(partition_keys)
-        keys = {key: self.data()[key] for key in partition_keys}
+        self.__validate_required_fields(self._partition_keys)
+        keys = {key: self.data()[key] for key in self._partition_keys}
 
         if self._timestamps:
             self._data["created_at"] = self._data["created_at"] if self._data.get(
                 "created_at") else self._get_current_timestamp()
             self._data["updated_at"] = self._get_current_timestamp()
 
-        return self._update(self.__safe(partition_keys), keys)
+        return self._update(self.__safe(self._partition_keys), keys)
 
     def delete(self):
         keys = {key: self.data()[key] for key in self._partition_keys}
@@ -175,54 +170,103 @@ class DynoLayer(CrudMixin):
         self._force_scan = True
         return self
 
+    def offset(self, last_evaluated_key: dict):
+        self._offset = last_evaluated_key
+        return self
+
     def get(self, return_all=False):
-        if not self._filter_expression and not self._key_condition_expression:
-            raise Exception("You must specify a filter condition before execute this operation.")
+        if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
+            raise QueryException(
+                "You must specify a filter condition before executing this operation.",
+                operation="get",
+                suggestions=[
+                    "Use .where() to add a filter condition",
+                    "Use .all() to query all records"
+                ]
+            )
 
         filter_expression = None
         if self._filter_expression:
             filter_expression = transform_params_in_filter(self._filter_expression)
 
         items = []
-        if self._key_condition_expression and not self._force_scan:
+        if self._key_condition_expression and not self._force_scan and not self._scan_all:
             key_condition = transform_params_in_query(self._key_condition_expression)
-            response = self._query(key_condition, filter_expression, self._index, self._limit, return_all, self._project_expression)
-            for row in response:
+            response = self._query(key_condition, filter_expression, self._index, self._limit, return_all, self._project_expression, self._offset)
+            for row in response["Items"]:
                 model_instance = self.__class__()
                 model_instance._data = row.copy()
                 items.append(model_instance)
         else:
-            response = self._scan(filter_expression, self._limit, return_all, self._project_expression)
-            for row in response:
+            response = self._scan(filter_expression, self._limit, return_all, self._project_expression, self._offset)
+            for row in response["Items"]:
                 model_instance = self.__class__()
                 model_instance._data = row.copy()
                 items.append(model_instance)
 
+        # Store pagination metadata BEFORE reset
+        last_key = response.get("LastEvaluatedKey")
+        count = response.get("Count", len(items))
+
         self.__reset_query_builder()
+
+        # Set pagination metadata AFTER reset
+        self.last_evaluated_key = last_key
+        self.get_count = count
+
         return Collection(items)
 
     def fetch(self, return_all=False):
         return self.get(return_all)
 
+    def count(self):
+        if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
+            raise QueryException(
+                "You must specify a filter condition before executing this operation.",
+                operation="count",
+                suggestions=[
+                    "Use .where() to add a filter condition",
+                    "Use .all() to count all records"
+                ]
+            )
+
+        filter_expression = None
+        if self._filter_expression:
+            filter_expression = transform_params_in_filter(self._filter_expression)
+
+        if self._key_condition_expression and not self._force_scan and not self._scan_all:
+            key_condition = transform_params_in_query(self._key_condition_expression)
+            response = self._query(key_condition, filter_expression, self._index, None, True, None, None)
+            count = len(response["Items"])
+        else:
+            response = self._scan(filter_expression, None, True, None, None)
+            count = len(response["Items"])
+
+        self.__reset_query_builder()
+        return count
+
     @classmethod
     def find_or_fail(cls, key: dict, message="Record not found."):
         """
-        Finds a model by key or raises an Exception if not found.
+        Finds a model by key or raises a RecordNotFoundException if not found.
         """
         instance = cls.find(key)
         if instance is None:
-            raise Exception(message)
+            raise RecordNotFoundException(message, key=key, entity=cls.__name__)
         return instance
 
     def __validate_required_fields(self, custom_data: List[str] = None):
+        required = self._required_fields
         if custom_data and len(custom_data) > 0:
-            required = custom_data
-        else:
-            required = self._required_fields
+            required = list(set(required + custom_data))
 
         for field in required:
             if field not in self._data:
-                raise Exception(f"Field '{field}' is required but missing.")
+                raise ValidationException(
+                    f"Field '{field}' is required but missing.",
+                    field=field,
+                    required_fields=required
+                )
 
     def __safe(self, unset_keys=None):
         data = self._data.copy()
@@ -251,3 +295,5 @@ class DynoLayer(CrudMixin):
         self._key_condition_expression = list()
         self._filter_expression = list()
         self._force_scan = False
+        self._offset = None
+        self._scan_all = False

@@ -28,13 +28,20 @@ class Collection:
 
 
 def extract_params(*args):
+    from dynolayer.exceptions import InvalidArgumentException
+
     if len(args) == 2:
         attribute, value = args
         condition = "="
     elif len(args) == 3:
         attribute, condition, value = args
     else:
-        raise Exception("'where' method must receive a number of 2 or 3 arguments.")
+        raise InvalidArgumentException(
+            "'where' method must receive 2 or 3 arguments.",
+            method="where",
+            expected="2 or 3 arguments (attribute, [condition,] value)",
+            received=f"{len(args)} arguments"
+        )
 
     return attribute, condition, value
 

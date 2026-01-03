@@ -4,7 +4,7 @@ from dynolayer.utils import Collection
 
 class TestRetrieveRecords:
     def test_with_all_method(self, get_user, create_table, aws_mock, save_records):
-        response = get_user().all()
+        response = get_user().all().get(return_all=True)
         assert isinstance(response, Collection)
         assert response.count() == 20
 

@@ -75,7 +75,7 @@ class CrudMixin:
         return True
 
     def _query(self, key_condition: str, filter_expression=None, index=None,
-               limit=None, return_all=False, pe=None):
+               limit=None, return_all=False, pe=None, offset=None):
         query_attributes = {"KeyConditionExpression": key_condition}
 
         if filter_expression:
@@ -90,6 +90,9 @@ class CrudMixin:
         if pe:
             query_attributes["ProjectionExpression"] = pe
 
+        if offset:
+            query_attributes["ExclusiveStartKey"] = offset
+
         response = self._table.query(**query_attributes)
         data = response["Items"]
         if return_all:
@@ -98,16 +101,26 @@ class CrudMixin:
                 response = self._table.query(**query_attributes)
                 data.extend(response["Items"])
 
-        return data
+        return {
+            "Items": data,
+            "Count": response.get("Count", len(data)),
+            "LastEvaluatedKey": response.get("LastEvaluatedKey")
+        }
 
-    def _scan(self, filter_expression: str, limit=None, return_all=False, pe=None):
-        scan_attributes = {"FilterExpression": filter_expression}
+    def _scan(self, filter_expression: str, limit=None, return_all=False, pe=None, offset=None):
+        scan_attributes = {}
+
+        if filter_expression:
+            scan_attributes["FilterExpression"] = filter_expression
 
         if limit:
             scan_attributes["Limit"] = limit
 
         if pe:
             scan_attributes["ProjectionExpression"] = pe
+
+        if offset:
+            scan_attributes["ExclusiveStartKey"] = offset
 
         response = self._table.scan(**scan_attributes)
         data = response["Items"]
@@ -117,4 +130,8 @@ class CrudMixin:
                 response = self._table.scan(**scan_attributes)
                 data.extend(response["Items"])
 
-        return data
+        return {
+            "Items": data,
+            "Count": response.get("Count", len(data)),
+            "LastEvaluatedKey": response.get("LastEvaluatedKey")
+        }
