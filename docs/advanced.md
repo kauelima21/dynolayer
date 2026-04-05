@@ -1,10 +1,88 @@
 # Advanced Features
 
+## Configuração
+
+O DynoLayer oferece uma API de configuração centralizada via `DynoLayer.configure()`. Chame uma vez no início da aplicação (handler da Lambda, bootstrap, etc).
+
+### AWS Lambda (produção)
+
+Na Lambda, as credenciais vêm automaticamente do IAM Role:
+
+```python
+from dynolayer import DynoLayer
+
+DynoLayer.configure(
+    timestamp_format="iso",
+    timestamp_timezone="America/Sao_Paulo",
+)
+```
+
+### Desenvolvimento local
+
+Com LocalStack ou DynamoDB Local:
+
+```python
+DynoLayer.configure(
+    endpoint_url="http://localhost:4566",
+    region="us-east-1",
+)
+```
+
+Com AWS CLI profile:
+
+```python
+DynoLayer.configure(profile_name="my-dev-profile")
+```
+
+Com credenciais explícitas:
+
+```python
+DynoLayer.configure(
+    aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
+    aws_secret_access_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    region="us-east-1",
+)
+```
+
+### Retry automático
+
+O DynoLayer configura retry automático com backoff para erros do DynamoDB (throttling, etc):
+
+```python
+DynoLayer.configure(
+    retry_max_attempts=5,       # Padrão: 3
+    retry_mode="adaptive",      # "standard" ou "adaptive" (padrão)
+)
+```
+
+O modo `adaptive` ajusta automaticamente a taxa de requests baseado nos erros de throttling.
+
+### Prioridade de resolução
+
+```
+parâmetro do model  →  DynoLayer.configure()  →  variáveis de ambiente  →  defaults
+     (maior)                                                                (menor)
+```
+
+### Referência de opções
+
+| Opção | Padrão | Descrição |
+|-------|--------|-----------|
+| `region` | `AWS_REGION` ou `"sa-east-1"` | Região AWS |
+| `endpoint_url` | `None` | URL customizada (LocalStack, DynamoDB Local) |
+| `aws_access_key_id` | `None` | Chave de acesso AWS |
+| `aws_secret_access_key` | `None` | Chave secreta AWS |
+| `profile_name` | `None` | Nome do perfil AWS CLI |
+| `timestamp_format` | `"numeric"` | `"numeric"` (unix int) ou `"iso"` (ISO 8601) |
+| `timestamp_timezone` | `TIMESTAMP_TIMEZONE` ou `"America/Sao_Paulo"` | Timezone para timestamps |
+| `retry_max_attempts` | `3` | Máximo de tentativas |
+| `retry_mode` | `"adaptive"` | Modo de retry do boto3 |
+
 ## Timestamps
 
-DynoLayer can automatically manage `created_at` and `updated_at` timestamps for your records.
+O DynoLayer gerencia automaticamente os campos `created_at` e `updated_at`.
 
-### Enabling timestamps
+### Habilitando timestamps
 
 ```python
 class User(DynoLayer):
@@ -13,100 +91,211 @@ class User(DynoLayer):
             entity="users",
             required_fields=["email"],
             fillable=["id", "email", "name"],
-            timestamps=True  # Enable automatic timestamps
+            timestamps=True
         )
 ```
 
-### How it works
+### Como funciona
 
-When `timestamps=True`:
+Quando `timestamps=True`:
 
-- **created_at**: Set automatically when creating a new record
-- **updated_at**: Set automatically when creating or updating a record
+- **created_at**: Definido automaticamente ao criar um novo registro
+- **updated_at**: Definido automaticamente ao criar ou atualizar um registro
 
-Both timestamps are stored as Unix timestamps (integers) in UTC.
+### Formatos de timestamp
+
+O DynoLayer suporta dois formatos de timestamp:
+
+| Formato | Tipo | Exemplo |
+|---------|------|---------|
+| `numeric` | `int` | `1735132800` (Unix timestamp) |
+| `iso` | `str` | `"2026-04-05T14:30:00-03:00"` (ISO 8601 com timezone) |
+
+#### Configuração global
 
 ```python
+DynoLayer.configure(timestamp_format="iso")
+```
+
+#### Override por model
+
+```python
+class Logs(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="logs",
+            fillable=["id", "message", "level"],
+            timestamps=True,
+            timestamp_format="iso",  # Apenas este model usa ISO
+        )
+
+class Metrics(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="metrics",
+            fillable=["id", "value", "metric_name"],
+            timestamps=True,
+            # Usa o formato da configuração global (padrão: "numeric")
+        )
+```
+
+### Exemplos
+
+```python
+# Com timestamp_format="numeric" (padrão)
 user = User.create({
     "id": 1,
     "email": "john@example.com",
     "name": "John Doe"
 })
-
-print(user.created_at)  # 1735132800 (Unix timestamp)
+print(user.created_at)  # 1735132800
 print(user.updated_at)  # 1735132800
 
-# Update the user
-user.name = "Jane Doe"
-user.save()
-
-print(user.updated_at)  # 1735136400 (new timestamp)
+# Com timestamp_format="iso"
+log = Logs.create({
+    "id": 1,
+    "message": "User logged in",
+    "level": "info"
+})
+print(log.created_at)  # "2026-04-05T14:30:00-03:00"
+print(log.updated_at)  # "2026-04-05T14:30:00-03:00"
 ```
 
-### Timezone configuration
+### Timezone
 
-Default timezone is `America/Sao_Paulo`. This is currently hardcoded in the library.
-
-## Pagination
-
-DynamoDB returns results in pages (up to 1MB per page). DynoLayer provides built-in pagination support.
-
-### Automatic pagination
-
-Use `return_all=True` to automatically fetch all pages:
+O timezone padrão é `America/Sao_Paulo`. Para alterar:
 
 ```python
-# Get all users across all pages
+# Via configuração
+DynoLayer.configure(timestamp_timezone="UTC")
+
+# Ou via variável de ambiente
+# export TIMESTAMP_TIMEZONE=UTC
+```
+
+## Batch Operations
+
+Operações em lote para melhor performance, especialmente em AWS Lambda onde o tempo de execução é custo.
+
+### batch_create
+
+Cria vários registros de uma vez. Valida `required_fields` e `fillable` para cada item:
+
+```python
+users = User.batch_create([
+    {"id": 1, "email": "john@example.com", "name": "John", "role": "admin"},
+    {"id": 2, "email": "jane@example.com", "name": "Jane", "role": "admin"},
+    {"id": 3, "email": "bob@example.com", "name": "Bob", "role": "common"},
+])
+
+# Retorna lista de instâncias do model
+for user in users:
+    print(f"{user.name} criado com sucesso")
+```
+
+### batch_find
+
+Busca vários registros por chave primária:
+
+```python
+users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
+
+# Retorna Collection
+for user in users:
+    print(user.name)
+
+emails = users.pluck("email")
+```
+
+### batch_destroy
+
+Deleta vários registros por chave primária:
+
+```python
+User.batch_destroy([{"id": 1}, {"id": 2}, {"id": 3}])
+```
+
+### Chunking automático
+
+O DynoLayer aplica chunking automático respeitando os limites do DynamoDB:
+
+- **Write/Delete**: 25 itens por batch (via `batch_writer`)
+- **Get**: 100 itens por batch (via `batch_get_item`)
+
+Itens não processados são automaticamente reenviados.
+
+## Paginação
+
+O DynamoDB retorna resultados em páginas (até 1MB por página). O DynoLayer oferece suporte a paginação automática e manual.
+
+### Paginação automática
+
+Use `return_all=True` para buscar todas as páginas automaticamente:
+
+```python
+# Buscar todos os registros de todas as páginas
 all_users = User.all().get(return_all=True)
 ```
 
-### Manual pagination
+### Paginação manual
 
-For better control over pagination (useful for APIs):
+Para controle fino da paginação (útil para APIs):
 
 ```python
 limit = 50
 user = User()
 
-# Get total count
+# Contar total (otimizado — não carrega dados na memória)
 total_count = user.all().count()
 
-# Build query
+# Construir query
 query = user.all().limit(limit)
 
-# Apply offset if provided by client
+# Aplicar offset se fornecido pelo cliente
 last_evaluated_key = request.get('last_evaluated_key')
 if last_evaluated_key:
     query = query.offset(last_evaluated_key)
 
-# Execute query
+# Executar query
 results = query.fetch()
 
-# Get result count and next page token
+# Dados de paginação
 results_count = user.get_count()
 next_key = user.last_evaluated_key()
 
-# Build API response
+# Construir resposta da API
 response = {
     'total_count': total_count,
     'results': results.to_list(),
     'results_count': results_count,
-    'last_evaluated_key': next_key  # Pass to client for next page
+    'last_evaluated_key': next_key  # Passar ao cliente para a próxima página
 }
 ```
 
-### Pagination properties
+### Propriedades de paginação
 
-After executing a query, access pagination data:
+Após executar uma query, acesse os dados de paginação:
 
-- `user.last_evaluated_key()`: DynamoDB's pagination token (keys of last item)
-- `user.get_count()`: Number of items returned in this page
+- `user.last_evaluated_key()`: Token de paginação do DynamoDB (chaves do último item)
+- `user.get_count()`: Número de itens retornados nesta página
 
-## Method Overriding (Polymorphism)
+### Count otimizado
 
-Override DynoLayer methods to customize behavior for your models.
+O método `count()` usa `Select='COUNT'` do DynamoDB, retornando apenas a contagem sem transferir dados:
 
-### Custom validation
+```python
+# Contar todos os registros
+total = User.all().count()
+
+# Contar com filtro
+admins = User.where("role", "admin").index("role-index").count()
+```
+
+## Method Overriding (Polimorfismo)
+
+Sobrescreva métodos do DynoLayer para personalizar o comportamento dos seus models.
+
+### Validação customizada
 
 ```python
 from dynolayer import DynoLayer
@@ -121,19 +310,18 @@ class User(DynoLayer):
         )
 
     def save(self):
-        # Custom validation before saving
+        # Validação customizada antes de salvar
         if not self._is_valid_email(self.email):
             return False
 
-        # Call parent save method
+        # Chamar o save do pai
         return super().save()
 
     def _is_valid_email(self, email):
-        # Simple email validation
         return "@" in email and "." in email
 ```
 
-Usage:
+Uso:
 
 ```python
 user = User()
@@ -145,7 +333,7 @@ user.email = "valid@example.com"
 print(user.save())  # True
 ```
 
-### Custom business logic
+### Lógica de negócio customizada
 
 ```python
 class Order(DynoLayer):
@@ -158,11 +346,11 @@ class Order(DynoLayer):
         )
 
     def save(self):
-        # Auto-calculate total
+        # Auto-calcular total
         if hasattr(self, 'items') and self.items:
             self.total = sum(item['price'] * item['quantity'] for item in self.items)
 
-        # Set default status
+        # Status padrão
         if not hasattr(self, 'status'):
             self.status = "pending"
 
@@ -173,7 +361,7 @@ class Order(DynoLayer):
         return self.save()
 ```
 
-Usage:
+Uso:
 
 ```python
 order = Order()
@@ -185,33 +373,33 @@ order.items = [
 ]
 order.save()
 
-print(order.total)   # 45.0 (auto-calculated)
-print(order.status)  # "pending" (auto-set)
+print(order.total)   # 45.0 (auto-calculado)
+print(order.status)  # "pending" (auto-definido)
 
 order.mark_as_paid()
 print(order.status)  # "paid"
 ```
 
-## Field Validation
+## Validação de Campos
 
-### Required fields
+### Campos obrigatórios
 
-Fields specified in `required_fields` must be present when creating records:
+Campos definidos em `required_fields` devem estar presentes ao criar registros:
 
 ```python
 class User(DynoLayer):
     def __init__(self):
         super().__init__(
             entity="users",
-            required_fields=["email", "name"],  # Required
+            required_fields=["email", "name"],
             fillable=["id", "email", "name", "role"]
         )
 
 
-# This will fail - missing required fields
-user = User.create({"id": 1})  # Error: email and name are required
+# Isso falha — campos obrigatórios ausentes
+user = User.create({"id": 1})  # Erro: email e name são obrigatórios
 
-# This works
+# Isso funciona
 user = User.create({
     "id": 1,
     "email": "john@example.com",
@@ -219,9 +407,9 @@ user = User.create({
 })
 ```
 
-### Mass assignment protection
+### Proteção de mass assignment
 
-Only fields in `fillable` can be assigned:
+Apenas campos em `fillable` podem ser atribuídos:
 
 ```python
 class User(DynoLayer):
@@ -229,7 +417,7 @@ class User(DynoLayer):
         super().__init__(
             entity="users",
             required_fields=["email"],
-            fillable=["id", "email", "name"]  # Only these can be assigned
+            fillable=["id", "email", "name"]  # Apenas estes podem ser atribuídos
         )
 
 
@@ -237,19 +425,17 @@ user = User.create({
     "id": 1,
     "email": "john@example.com",
     "name": "John Doe",
-    "is_admin": True  # This will be IGNORED (not in fillable)
+    "is_admin": True  # IGNORADO (não está em fillable)
 })
 
 print(hasattr(user, 'is_admin'))  # False
 ```
 
-This protects against unwanted data being inserted into your database.
+## Tipos de Dados Complexos
 
-## Complex Data Types
+O DynoLayer suporta os tipos complexos do DynamoDB:
 
-DynoLayer supports DynamoDB's complex types:
-
-### Nested objects
+### Objetos aninhados
 
 ```python
 user = User.create({
@@ -265,12 +451,11 @@ user = User.create({
     }
 })
 
-# Access nested data
 print(user.profile)
 # {"age": 30, "city": "São Paulo", "preferences": {...}}
 ```
 
-### Lists
+### Listas
 
 ```python
 user = User.create({
@@ -286,95 +471,87 @@ user = User.create({
 print(user.phones)  # ["11 91234-5678", "11 95678-1234"]
 ```
 
-### Numeric precision
+### Precisão numérica
 
-DynamoDB requires `Decimal` for numbers. DynoLayer automatically converts floats:
+O DynamoDB requer `Decimal` para números. O DynoLayer converte floats automaticamente:
 
 ```python
 product = Product.create({
     "id": 1,
     "name": "Widget",
-    "price": 29.99  # Automatically converted to Decimal
+    "price": 29.99  # Convertido automaticamente para Decimal
 })
 ```
 
-## Environment Configuration
+## Boas Práticas
 
-### AWS Region
+### Use índices nas suas queries
 
-Set the AWS region via environment variable:
-
-```bash
-export AWS_REGION=us-east-1
-```
-
-Default region is `sa-east-1` if not specified.
-
-### AWS Credentials
-
-DynoLayer uses boto3, which supports multiple credential sources:
-
-1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-2. AWS credentials file (`~/.aws/credentials`)
-3. IAM roles (for EC2, Lambda, etc.)
-
-See [boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html) for details.
-
-## Best Practices
-
-### Index your queries
-
-Always use indexes for efficient queries:
+Sempre use índices para queries eficientes:
 
 ```python
-# Good - uses index
+# Bom — usa índice
 users = (
     User.where("role", "admin")
     .index("role-index")
     .get()
 )
 
-# Bad - forces expensive scan
+# Ruim — força scan custoso
 users = User.where("role", "admin").force_scan().get()
 ```
 
-### Limit results
+### Limite os resultados
 
-Always limit results to what you need:
+Sempre limite os resultados ao que você precisa:
 
 ```python
-# Good - only get what you need
+# Bom — busca apenas o necessário
 users = User.where("role", "admin").limit(100).get()
 
-# Bad - might return millions of records
+# Ruim — pode retornar milhões de registros
 users = User.where("role", "admin").get(return_all=True)
 ```
 
-### Use projection
+### Use projeção
 
-Only fetch the attributes you need:
+Busque apenas os atributos que você precisa:
 
 ```python
-# Good - only fetch needed fields
+# Bom — busca apenas campos necessários
 users = (
     User.all()
     .attributes_to_get(["id", "email"])
     .get()
 )
 
-# Bad - fetches all attributes
+# Ruim — busca todos os atributos
 users = User.all().get()
 ```
 
-### Validate data
+### Use batch operations
 
-Always validate data in your models:
+Para operações com múltiplos registros, prefira métodos batch:
+
+```python
+# Bom — uma chamada batch
+users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
+
+# Ruim — três chamadas individuais
+user1 = User.find({"id": 1})
+user2 = User.find({"id": 2})
+user3 = User.find({"id": 3})
+```
+
+### Valide seus dados
+
+Sempre valide dados nos seus models:
 
 ```python
 class User(DynoLayer):
     def save(self):
         if not self._validate():
-            raise ValueError("Invalid user data")
+            raise ValueError("Dados do usuário inválidos")
         return super().save()
 
     def _validate(self):

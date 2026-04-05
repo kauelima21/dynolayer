@@ -16,7 +16,7 @@ users = User.where("role", "admin").get()
 Collections are iterable, so you can use them in loops:
 
 ```python
-users = User.all()
+users = User.all().get()
 
 for user in users:
     print(f"{user.name} - {user.email}")
@@ -50,7 +50,7 @@ print(f"Found {users.count()} admins")
 Collections support Python's built-in `len()` function:
 
 ```python
-users = User.all()
+users = User.all().get()
 print(f"Total users: {len(users)}")
 ```
 
@@ -59,7 +59,7 @@ print(f"Total users: {len(users)}")
 Extract a single attribute from all items:
 
 ```python
-users = User.all()
+users = User.all().get()
 
 # Get all emails as a list
 emails = users.pluck("email")
@@ -73,7 +73,7 @@ ids = users.pluck("id")
 If an item doesn't have the requested attribute, `None` is returned for that item:
 
 ```python
-users = User.all()
+users = User.all().get()
 roles = users.pluck("role")
 # ["admin", None, "moderator", ...]
 ```
@@ -98,7 +98,7 @@ This is useful for JSON serialization or passing data to templates:
 ```python
 import json
 
-users = User.all()
+users = User.all().get()
 json_data = json.dumps(users.to_list())
 ```
 

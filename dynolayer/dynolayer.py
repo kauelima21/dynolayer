@@ -1,13 +1,14 @@
 from decimal import Decimal
 from typing import List, Dict, Literal, Any
 
+from dynolayer.config import DynoConfig
 from dynolayer.crud_mixin import CrudMixin
 from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
 from dynolayer.exceptions import QueryException, ValidationException, RecordNotFoundException
 
 
 class DynoLayer(CrudMixin):
-    def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True):
+    def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None):
         super().__init__(entity)
 
         if fillable is None:
@@ -18,6 +19,7 @@ class DynoLayer(CrudMixin):
 
         self._required_fields = required_fields
         self._timestamps = timestamps
+        self._timestamp_format = timestamp_format
         self._fillable = fillable
 
         self._index = None
@@ -55,6 +57,11 @@ class DynoLayer(CrudMixin):
             super().__setattr__(key, value)
         else:
             self._data[key] = value
+
+    @classmethod
+    def configure(cls, **kwargs):
+        DynoConfig.set(**kwargs)
+        cls._reset_boto_clients()
 
     @classmethod
     def all(cls):
@@ -101,12 +108,54 @@ class DynoLayer(CrudMixin):
         instance.__validate_required_fields()
 
         if instance._timestamps:
-            instance._data["created_at"] = instance._get_current_timestamp()
-            instance._data["updated_at"] = instance._get_current_timestamp()
+            instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
+            instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
 
         instance._put(instance.__safe())
 
         return instance
+
+    @classmethod
+    def batch_create(cls, items: List[Dict]):
+        instances = []
+
+        for data in items:
+            instance = cls()
+
+            for key, value in data.items():
+                if key in instance.fillable():
+                    instance._data[key] = value
+
+            instance.__validate_required_fields()
+
+            if instance._timestamps:
+                instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
+                instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
+
+            instances.append(instance)
+
+        safe_items = [inst.__safe() for inst in instances]
+        cls()._batch_put(safe_items)
+
+        return instances
+
+    @classmethod
+    def batch_find(cls, keys: List[Dict]):
+        instance = cls()
+        raw_items = instance._batch_get(keys)
+
+        items = []
+        for row in raw_items:
+            model_instance = cls()
+            model_instance._data = row.copy()
+            items.append(model_instance)
+
+        return Collection(items)
+
+    @classmethod
+    def batch_destroy(cls, keys: List[Dict]):
+        instance = cls()
+        return instance._batch_delete(keys)
 
     def save(self):
         self.__validate_required_fields(self._partition_keys)
@@ -114,8 +163,8 @@ class DynoLayer(CrudMixin):
 
         if self._timestamps:
             self._data["created_at"] = self._data["created_at"] if self._data.get(
-                "created_at") else self._get_current_timestamp()
-            self._data["updated_at"] = self._get_current_timestamp()
+                "created_at") else self._get_current_timestamp(self._timestamp_format)
+            self._data["updated_at"] = self._get_current_timestamp(self._timestamp_format)
 
         return self._update(self.__safe(self._partition_keys), keys)
 
@@ -242,20 +291,15 @@ class DynoLayer(CrudMixin):
 
         if self._key_condition_expression and not self._force_scan and not self._scan_all:
             key_condition = transform_params_in_query(self._key_condition_expression)
-            response = self._query(key_condition, filter_expression, self._index, None, True, None, None)
-            count = len(response["Items"])
+            total = self._count_query(key_condition, filter_expression, self._index)
         else:
-            response = self._scan(filter_expression, None, True, None, None)
-            count = len(response["Items"])
+            total = self._count_scan(filter_expression)
 
         self.__reset_query_builder()
-        return count
+        return total
 
     @classmethod
     def find_or_fail(cls, key: dict, message="Record not found."):
-        """
-        Finds a model by key or raises a RecordNotFoundException if not found.
-        """
         instance = cls.find(key)
         if instance is None:
             raise RecordNotFoundException(message, key=key, entity=cls.__name__)
@@ -297,7 +341,9 @@ class DynoLayer(CrudMixin):
             self._filter_expression.append({filter_operator: {attribute: (condition, value)}})
 
     def __reset_query_builder(self):
+        self._index = None
         self._limit = None
+        self._project_expression = None
         self._key_condition_expression = list()
         self._filter_expression = list()
         self._force_scan = False

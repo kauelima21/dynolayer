@@ -1,32 +1,99 @@
 # Getting Started
 
-## Installation
+## Instalação
 
-Install DynoLayer using pip:
+Instale o DynoLayer via pip:
 
 ```bash
 pip install dynolayer
 ```
 
-Or with boto3 included:
+Ou com boto3 incluído:
 
 ```bash
-pip install dynolayer[aws]
+pip install dynolayer[full]
 ```
 
-## Configuration
+> Requer Python 3.9+
 
-DynoLayer uses boto3 to connect to DynamoDB. Set your AWS region via environment variable:
+## Configuração
 
-```bash
-export AWS_REGION=sa-east-1
+### Configuração rápida
+
+O DynoLayer oferece uma API de configuração centralizada. Chame `configure()` uma vez no início da aplicação:
+
+```python
+from dynolayer import DynoLayer
+
+DynoLayer.configure(
+    region="sa-east-1",
+    timestamp_format="numeric",
+    timestamp_timezone="America/Sao_Paulo",
+)
 ```
 
-Make sure your AWS credentials are configured (via environment variables, AWS credentials file, or IAM roles).
+### Em AWS Lambda (produção)
 
-## Your First Model
+Na Lambda, as credenciais vêm automaticamente do IAM Role. Basta configurar o que precisar:
 
-DynoLayer follows the Active Record pattern, similar to Laravel's Eloquent. Each model class represents a DynamoDB table.
+```python
+DynoLayer.configure(timestamp_format="iso")
+```
+
+### Em desenvolvimento local
+
+Com LocalStack:
+
+```python
+DynoLayer.configure(
+    endpoint_url="http://localhost:4566",
+    region="us-east-1",
+)
+```
+
+Com AWS CLI profile:
+
+```python
+DynoLayer.configure(profile_name="my-dev-profile")
+```
+
+Com credenciais explícitas:
+
+```python
+DynoLayer.configure(
+    aws_access_key_id="AKIAIOSFODNN7EXAMPLE",
+    aws_secret_access_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    region="us-east-1",
+)
+```
+
+### Prioridade de resolução
+
+As configurações seguem esta prioridade (da maior para a menor):
+
+```
+parâmetro do model  →  DynoLayer.configure()  →  variáveis de ambiente  →  defaults
+```
+
+Por exemplo, se `AWS_REGION` está definida como variável de ambiente e você chama `DynoLayer.configure(region="us-east-1")`, o valor `"us-east-1"` será usado.
+
+### Opções disponíveis
+
+| Opção | Padrão | Descrição |
+|-------|--------|-----------|
+| `region` | `AWS_REGION` ou `"sa-east-1"` | Região AWS |
+| `endpoint_url` | `None` | URL customizada (LocalStack, DynamoDB Local) |
+| `aws_access_key_id` | `None` | Chave de acesso AWS |
+| `aws_secret_access_key` | `None` | Chave secreta AWS |
+| `profile_name` | `None` | Nome do perfil AWS CLI |
+| `timestamp_format` | `"numeric"` | `"numeric"` (unix int) ou `"iso"` (ISO 8601) |
+| `timestamp_timezone` | `TIMESTAMP_TIMEZONE` ou `"America/Sao_Paulo"` | Timezone para timestamps |
+| `retry_max_attempts` | `3` | Máximo de tentativas para retry |
+| `retry_mode` | `"adaptive"` | Modo de retry: `"standard"` ou `"adaptive"` |
+
+## Seu Primeiro Model
+
+O DynoLayer segue o padrão Active Record, similar ao Eloquent do Laravel. Cada classe model representa uma tabela DynamoDB.
 
 ```python
 from dynolayer import DynoLayer
@@ -35,26 +102,27 @@ from dynolayer import DynoLayer
 class User(DynoLayer):
     def __init__(self):
         super().__init__(
-            entity="users",                           # Table name
-            required_fields=["email", "name"],        # Required fields
-            fillable=["id", "email", "name", "role"], # Mass-assignable fields
-            timestamps=True                           # Auto-manage created_at/updated_at
+            entity="users",                           # Nome da tabela
+            required_fields=["email", "name"],        # Campos obrigatórios
+            fillable=["id", "email", "name", "role"], # Campos permitidos para mass assignment
+            timestamps=True                           # Gerenciar created_at/updated_at
         )
 ```
 
-### Model Configuration
+### Parâmetros do Model
 
-- **entity**: DynamoDB table name
-- **required_fields**: Fields that must be present when creating records
-- **fillable**: Whitelist of fields that can be mass-assigned (protection against unwanted data)
-- **timestamps**: When `True`, automatically adds `created_at` and `updated_at` fields
+- **entity**: Nome da tabela DynamoDB
+- **required_fields**: Campos que devem estar presentes ao criar registros
+- **fillable**: Whitelist de campos que podem ser atribuídos em massa (proteção contra dados indesejados)
+- **timestamps**: Quando `True`, adiciona automaticamente `created_at` e `updated_at`
+- **timestamp_format**: Override do formato de timestamp para este model (`"numeric"` ou `"iso"`)
 
-## Basic Usage
+## Uso Básico
 
-### Create a record
+### Criar um registro
 
 ```python
-# Using the create method
+# Usando o método create
 user = User.create({
     "id": 1,
     "email": "john@example.com",
@@ -62,7 +130,7 @@ user = User.create({
     "role": "admin"
 })
 
-# Using save method
+# Usando o método save
 user = User()
 user.id = 1
 user.email = "john@example.com"
@@ -71,20 +139,32 @@ user.role = "admin"
 user.save()
 ```
 
-### Retrieve records
+### Criar em lote
 
 ```python
-# Get all users
-users = User.all()
-
-# Find by primary key
-user = User.find({"id": 1})
-
-# Find or raise exception
-user = User.find_or_fail({"id": 1}, "User not found")
+users = User.batch_create([
+    {"id": 1, "email": "john@example.com", "name": "John", "role": "admin"},
+    {"id": 2, "email": "jane@example.com", "name": "Jane", "role": "admin"},
+])
 ```
 
-### Update a record
+### Buscar registros
+
+```python
+# Buscar todos
+users = User.all().get()
+
+# Buscar por chave primária
+user = User.find({"id": 1})
+
+# Buscar ou lançar exceção
+user = User.find_or_fail({"id": 1}, "Usuário não encontrado")
+
+# Buscar vários por chave primária (batch)
+users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
+```
+
+### Atualizar um registro
 
 ```python
 user = User.find({"id": 1})
@@ -92,19 +172,22 @@ user.name = "Jane Doe"
 user.save()
 ```
 
-### Delete a record
+### Deletar um registro
 
 ```python
-# Delete instance
+# Deletar instância
 user = User.find({"id": 1})
 user.delete()
 
-# Or use destroy method
+# Ou usar o método destroy
 User.destroy({"id": 1})
+
+# Deletar em lote
+User.batch_destroy([{"id": 1}, {"id": 2}, {"id": 3}])
 ```
 
-## Next Steps
+## Próximos Passos
 
-- Learn about the [Query Builder](query-builder.md) for advanced filtering
-- Explore [Collections](collections.md) for working with result sets
-- Check [Advanced Features](advanced.md) for pagination, polymorphism, and more
+- Aprenda sobre o [Query Builder](query-builder.md) para filtros avançados
+- Explore [Collections](collections.md) para trabalhar com conjuntos de resultados
+- Veja [Advanced Features](advanced.md) para configuração avançada, paginação, timestamps e mais

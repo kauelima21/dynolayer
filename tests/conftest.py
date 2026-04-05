@@ -3,7 +3,16 @@ import pytest
 from faker import Faker
 from moto import mock_aws
 
+from dynolayer.config import DynoConfig
+from dynolayer.crud_mixin import CrudMixin
 from dynolayer.dynolayer import DynoLayer
+
+
+@pytest.fixture(autouse=True)
+def reset_dynolayer_cache():
+    yield
+    CrudMixin._reset_boto_clients()
+    DynoConfig.reset()
 
 
 @pytest.fixture

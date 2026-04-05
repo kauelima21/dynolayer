@@ -1,32 +1,57 @@
 # DynoLayer
 
-A Python library for DynamoDB that brings the elegance of Laravel's Eloquent ORM to your serverless applications. Built on the Active Record pattern, DynoLayer provides an intuitive, fluent interface for working with DynamoDB tables.
+Uma biblioteca Python para DynamoDB que traz a elegância do Eloquent ORM (Laravel) para suas aplicações serverless. Baseada no padrão Active Record, o DynoLayer oferece uma interface fluente e intuitiva para trabalhar com tabelas DynamoDB.
 
 ## Features
 
-- **Active Record Pattern**: Define models that represent DynamoDB tables
-- **Fluent Query Builder**: Chain methods to build complex queries
-- **Eloquent-like Collections**: Work with result sets using familiar methods
-- **Automatic Timestamps**: Optional `created_at` and `updated_at` management
-- **Mass Assignment Protection**: Whitelist fields to prevent unwanted data
-- **Index Support**: Query using Global and Local Secondary Indexes
-- **Type Safety**: Automatic type conversion for DynamoDB compatibility
+- **Active Record Pattern**: Defina models que representam tabelas DynamoDB
+- **Fluent Query Builder**: Encadeie métodos para construir queries complexas
+- **Collections**: Trabalhe com resultados usando métodos similares ao Eloquent
+- **Timestamps Automáticos**: Gerenciamento opcional de `created_at` e `updated_at` (numérico ou ISO 8601)
+- **Proteção de Mass Assignment**: Whitelist de campos para prevenir dados indesejados
+- **Suporte a Índices**: Query usando Global e Local Secondary Indexes
+- **Batch Operations**: Operações em lote para create, find e destroy
+- **Configuração Centralizada**: API de configuração para credenciais AWS, timestamps e retry
+- **Type Safety**: Conversão automática de tipos para compatibilidade com DynamoDB
 
-## Installation
+## Instalação
 
 ```bash
 pip install dynolayer
 ```
 
-Or with boto3 included:
+Ou com boto3 incluído:
 
 ```bash
-pip install dynolayer[aws]
+pip install dynolayer[full]
 ```
+
+> Requer Python 3.9+
 
 ## Quick Start
 
-### Define a Model
+### Configuração
+
+```python
+from dynolayer import DynoLayer
+
+# Em Lambda (produção) — IAM role cuida das credenciais
+DynoLayer.configure(
+    timestamp_format="numeric",              # "numeric" (unix int) ou "iso" (ISO 8601)
+    timestamp_timezone="America/Sao_Paulo",  # Timezone para timestamps
+)
+
+# Dev local com LocalStack
+DynoLayer.configure(
+    endpoint_url="http://localhost:4566",
+    region="us-east-1",
+)
+
+# Dev local com AWS profile
+DynoLayer.configure(profile_name="my-dev-profile")
+```
+
+### Definir um Model
 
 ```python
 from dynolayer import DynoLayer
@@ -35,17 +60,17 @@ from dynolayer import DynoLayer
 class User(DynoLayer):
     def __init__(self):
         super().__init__(
-            entity="users",                           # DynamoDB table name
-            required_fields=["email", "name"],        # Required fields
-            fillable=["id", "email", "name", "role"], # Mass-assignable fields
-            timestamps=True                           # Auto-manage created_at/updated_at
+            entity="users",                           # Nome da tabela DynamoDB
+            required_fields=["email", "name"],        # Campos obrigatórios
+            fillable=["id", "email", "name", "role"], # Campos permitidos para mass assignment
+            timestamps=True                           # Gerenciar created_at/updated_at automaticamente
         )
 ```
 
-### Create Records
+### Criar Registros
 
 ```python
-# Create using class method
+# Criar usando class method
 user = User.create({
     "id": 1,
     "email": "john@example.com",
@@ -53,24 +78,34 @@ user = User.create({
     "role": "admin"
 })
 
-# Or create using instance
+# Ou criar usando instância
 user = User()
 user.id = 1
 user.email = "john@example.com"
 user.name = "John Doe"
 user.save()
+
+# Criar em lote
+users = User.batch_create([
+    {"id": 1, "email": "john@example.com", "name": "John", "role": "admin"},
+    {"id": 2, "email": "jane@example.com", "name": "Jane", "role": "admin"},
+    {"id": 3, "email": "bob@example.com", "name": "Bob", "role": "common"},
+])
 ```
 
-### Query Records
+### Consultar Registros
 
 ```python
-# Get all records
-users = User.all()
+# Buscar todos os registros
+users = User.all().get()
 
-# Find by primary key
+# Buscar por chave primária
 user = User.find({"id": 1})
 
-# Query with conditions
+# Buscar vários por chave primária (batch)
+users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
+
+# Query com condições
 admins = (
     User.where("role", "admin")
     .and_where("status", "active")
@@ -78,7 +113,7 @@ admins = (
     .get()
 )
 
-# Complex queries
+# Queries complexas
 recent_admins = (
     User.where("role", "admin")
     .where_between("created_at", yesterday, today)
@@ -88,7 +123,7 @@ recent_admins = (
 )
 ```
 
-### Update Records
+### Atualizar Registros
 
 ```python
 user = User.find({"id": 1})
@@ -96,48 +131,89 @@ user.name = "Jane Doe"
 user.save()
 ```
 
-### Delete Records
+### Deletar Registros
 
 ```python
-# Delete instance
+# Deletar instância
 user = User.find({"id": 1})
 user.delete()
 
-# Or delete by key
+# Ou deletar por chave
 User.destroy({"id": 1})
+
+# Deletar em lote
+User.batch_destroy([{"id": 1}, {"id": 2}, {"id": 3}])
 ```
 
-## Working with Collections
+## Configuração
 
-Query results are returned as `Collection` objects with helpful methods:
+O DynoLayer oferece uma API de configuração centralizada via `DynoLayer.configure()`.
+
+### Opções disponíveis
+
+| Opção | Padrão | Descrição |
+|-------|--------|-----------|
+| `region` | `AWS_REGION` ou `"sa-east-1"` | Região AWS |
+| `endpoint_url` | `None` | URL customizada (LocalStack, DynamoDB Local) |
+| `aws_access_key_id` | `None` | Chave de acesso AWS (usa IAM role se não definido) |
+| `aws_secret_access_key` | `None` | Chave secreta AWS |
+| `profile_name` | `None` | Nome do perfil AWS CLI |
+| `timestamp_format` | `"numeric"` | Formato dos timestamps: `"numeric"` (unix int) ou `"iso"` (ISO 8601) |
+| `timestamp_timezone` | `TIMESTAMP_TIMEZONE` ou `"America/Sao_Paulo"` | Timezone para timestamps |
+| `retry_max_attempts` | `3` | Máximo de tentativas para retry |
+| `retry_mode` | `"adaptive"` | Modo de retry do boto3: `"standard"` ou `"adaptive"` |
+
+### Prioridade de resolução
+
+```
+parâmetro do model  →  DynoLayer.configure()  →  variáveis de ambiente  →  defaults
+     (maior)                                                                (menor)
+```
+
+### Override por model
+
+```python
+class Logs(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="logs",
+            fillable=["id", "message", "level"],
+            timestamps=True,
+            timestamp_format="iso",  # Override apenas para este model
+        )
+```
+
+## Collections
+
+Resultados de queries são retornados como objetos `Collection`:
 
 ```python
 users = User.where("role", "admin").get()
 
-# Iterate over results
+# Iterar sobre resultados
 for user in users:
     print(user.name)
 
-# Get first item
+# Primeiro item
 admin = users.first()
 
-# Count results
-print(f"Found {users.count()} admins")
+# Contar resultados
+print(f"Encontrados {users.count()} admins")
 
-# Extract single attribute
+# Extrair um atributo
 emails = users.pluck("email")
 # ["john@example.com", "jane@example.com", ...]
 
-# Convert to list of dicts
+# Converter para lista de dicts
 data = users.to_list()
 # [{"id": 1, "name": "John", ...}, ...]
 ```
 
 ## Query Builder
 
-DynoLayer provides a fluent, chainable interface for building queries:
+O DynoLayer oferece uma interface fluente e encadeável para construir queries:
 
-### Comparison Operators
+### Operadores de Comparação
 
 ```python
 User.where("age", ">", 18).get()
@@ -145,12 +221,12 @@ User.where("status", "=", "active").get()
 User.where("score", ">=", 100).get()
 ```
 
-Supported operators: `=`, `<`, `<=`, `>`, `>=`, `<>`, `begins_with`, `contains`
+Operadores suportados: `=`, `<`, `<=`, `>`, `>=`, `<>`, `begins_with`, `contains`
 
-### Chaining Conditions
+### Encadeamento de Condições
 
 ```python
-# AND conditions
+# Condições AND
 users = (
     User.where("role", "admin")
     .and_where("status", "active")
@@ -158,18 +234,18 @@ users = (
     .get()
 )
 
-# OR conditions
+# Condições OR
 users = (
     User.where("role", "admin")
     .or_where("role", "moderator")
     .get()
 )
 
-# NOT conditions
+# Condições NOT
 users = User.where_not("status", "banned").get()
 ```
 
-### Range and Set Queries
+### Queries de Range e Conjuntos
 
 ```python
 # BETWEEN
@@ -184,7 +260,7 @@ users = User.where_between("created_at", yesterday, today).get()
 users = User.where_in("status", ["active", "pending", "trial"]).get()
 ```
 
-### String Operations
+### Operações com Strings
 
 ```python
 # Begins with
@@ -194,17 +270,17 @@ users = User.where("email", "begins_with", "john").get()
 users = User.where("name", "contains", "Smith").get()
 ```
 
-### Using Indexes
+### Usando Índices
 
 ```python
-# Query using Global Secondary Index
+# Query usando Global Secondary Index
 users = (
     User.where("role", "admin")
     .index("role-index")
     .get()
 )
 
-# Composite index
+# Índice composto
 users = (
     User.where("role", "admin")
     .and_where("email", "begins_with", "john")
@@ -213,19 +289,27 @@ users = (
 )
 ```
 
-### Limiting and Projection
+### Limit e Projeção
 
 ```python
-# Limit results
+# Limitar resultados
 users = User.where("role", "admin").limit(10).get()
 
-# Select specific attributes
+# Selecionar atributos específicos
 users = User.all().attributes_to_get(["id", "email", "name"]).get()
+```
+
+### Count
+
+```python
+# Contar registros (otimizado — não carrega dados na memória)
+total = User.all().count()
+admins_count = User.where("role", "admin").index("role-index").count()
 ```
 
 ### Query vs Scan
 
-DynoLayer automatically chooses between Query and Scan. Force a scan when needed:
+O DynoLayer escolhe automaticamente entre Query e Scan. Force um scan quando necessário:
 
 ```python
 users = (
@@ -236,288 +320,119 @@ users = (
 )
 ```
 
-## Advanced Features
+## Batch Operations
 
-### Timestamps
-
-Enable automatic timestamp management:
+Operações em lote para melhor performance, especialmente em AWS Lambda:
 
 ```python
-class User(DynoLayer):
-    def __init__(self):
-        super().__init__(
-            entity="users",
-            fillable=["id", "email", "name"],
-            timestamps=True  # Adds created_at and updated_at
-        )
+# Criar vários registros de uma vez
+users = User.batch_create([
+    {"id": 1, "email": "john@example.com", "name": "John", "role": "admin"},
+    {"id": 2, "email": "jane@example.com", "name": "Jane", "role": "admin"},
+])
+
+# Buscar vários por chave primária
+users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
+
+# Deletar vários
+User.batch_destroy([{"id": 1}, {"id": 2}, {"id": 3}])
 ```
 
-Timestamps are stored as Unix timestamps in UTC.
+O chunking automático é aplicado (25 items para write/delete, 100 para get), com retry de itens não processados.
 
-### Pagination
+## Paginação
 
 ```python
-# Automatic pagination - fetches all pages
+# Paginação automática — busca todas as páginas
 all_users = User.all().get(return_all=True)
 
-# Manual pagination for APIs
+# Paginação manual para APIs
 limit = 50
 query = User.all().limit(limit)
 
-# Apply offset from previous page
+# Aplicar offset da página anterior
 if last_evaluated_key:
     query = query.offset(last_evaluated_key)
 
 results = query.fetch()
 
-# Get pagination data
+# Dados de paginação
 next_key = User().last_evaluated_key()
 count = User().get_count()
 ```
 
-### Method Overriding
-
-Customize model behavior by overriding methods:
-
-```python
-class User(DynoLayer):
-    def __init__(self):
-        super().__init__(
-            entity="users",
-            required_fields=["email"],
-            fillable=["id", "email", "name"]
-        )
-
-    def save(self):
-        # Custom validation
-        if not self._is_valid_email(self.email):
-            return False
-
-        # Call parent save
-        return super().save()
-
-    def _is_valid_email(self, email):
-        return "@" in email and "." in email
-```
-
-### Field Validation
-
-```python
-class User(DynoLayer):
-    def __init__(self):
-        super().__init__(
-            entity="users",
-            required_fields=["email", "name"],  # Required on create
-            fillable=["id", "email", "name"],   # Only these can be assigned
-        )
-```
-
-Required fields must be present when creating records. Non-fillable fields are automatically filtered out.
-
-### Complex Data Types
-
-DynoLayer supports nested objects and lists:
-
-```python
-user = User.create({
-    "id": 1,
-    "email": "john@example.com",
-    "profile": {
-        "age": 30,
-        "preferences": {
-            "theme": "dark"
-        }
-    },
-    "phones": ["+1234567890", "+0987654321"]
-})
-```
-
-## Configuration
-
-### AWS Region
-
-```bash
-export AWS_REGION=sa-east-1
-```
-
-Default region is `sa-east-1` if not specified.
-
-### AWS Credentials
-
-DynoLayer uses boto3 for AWS authentication. Credentials can be provided via:
-
-- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-- AWS credentials file (`~/.aws/credentials`)
-- IAM roles (for EC2, Lambda, etc.)
-
 ## API Reference
+
+### Configuração
+
+| Método | Descrição |
+|--------|-----------|
+| `DynoLayer.configure(**kwargs)` | Configurar credenciais AWS, timestamps e retry |
 
 ### Class Methods
 
-| Method | Description |
-|--------|-------------|
-| `all()` | Retrieve all records as Collection |
-| `find(key)` | Find record by primary key |
-| `find_or_fail(key, message)` | Find or raise exception |
-| `where(*args)` | Start query builder |
-| `create(data)` | Create and save record |
-| `destroy(key)` | Delete record by key |
+| Método | Descrição |
+|--------|-----------|
+| `all()` | Iniciar query para todos os registros |
+| `find(key)` | Buscar registro por chave primária |
+| `find_or_fail(key, message)` | Buscar ou lançar exceção |
+| `where(*args)` | Iniciar query builder |
+| `create(data)` | Criar e salvar registro |
+| `destroy(key)` | Deletar registro por chave |
+| `batch_create(items)` | Criar vários registros em lote |
+| `batch_find(keys)` | Buscar vários por chave primária |
+| `batch_destroy(keys)` | Deletar vários registros em lote |
 
-### Query Builder Methods
+### Métodos do Query Builder
 
-| Method | Description |
-|--------|-------------|
-| `where(attr, operator, value)` | Add WHERE condition |
-| `and_where(attr, operator, value)` | Add AND condition |
-| `or_where(attr, operator, value)` | Add OR condition |
-| `where_not(attr, operator, value)` | Add NOT condition |
-| `where_between(attr, start, end)` | Add BETWEEN condition |
-| `where_in(attr, values)` | Add IN condition |
-| `index(name)` | Specify index to use |
-| `limit(count)` | Limit results |
-| `attributes_to_get(attrs)` | Select specific attributes |
-| `force_scan()` | Force scan instead of query |
-| `get(return_all)` | Execute and return Collection |
-| `fetch(return_all)` | Alias for get() |
+| Método | Descrição |
+|--------|-----------|
+| `where(attr, operator, value)` | Adicionar condição WHERE |
+| `and_where(attr, operator, value)` | Adicionar condição AND |
+| `or_where(attr, operator, value)` | Adicionar condição OR |
+| `where_not(attr, operator, value)` | Adicionar condição NOT |
+| `where_between(attr, start, end)` | Adicionar condição BETWEEN |
+| `where_in(attr, values)` | Adicionar condição IN |
+| `index(name)` | Especificar índice a usar |
+| `limit(count)` | Limitar resultados |
+| `offset(last_evaluated_key)` | Definir ponto de início da paginação |
+| `attributes_to_get(attrs)` | Selecionar atributos específicos |
+| `force_scan()` | Forçar scan ao invés de query |
+| `get(return_all)` | Executar e retornar Collection |
+| `fetch(return_all)` | Alias para get() |
+| `count()` | Contar registros (otimizado com Select=COUNT) |
 
-### Instance Methods
+### Métodos de Instância
 
-| Method | Description |
-|--------|-------------|
-| `save()` | Create or update record |
-| `delete()` | Delete current record |
-| `data()` | Get internal data dictionary |
-| `fillable()` | Get fillable fields list |
+| Método | Descrição |
+|--------|-----------|
+| `save()` | Criar ou atualizar registro |
+| `delete()` | Deletar registro atual |
+| `data()` | Obter dicionário interno de dados |
+| `fillable()` | Obter lista de campos preenchíveis |
+| `last_evaluated_key()` | Token de paginação da última query |
+| `get_count()` | Contagem de itens retornados na última query |
 
-### Collection Methods
+### Métodos da Collection
 
-| Method | Description |
-|--------|-------------|
-| `first()` | Get first item or None |
-| `count()` | Count of items |
-| `pluck(key)` | Extract single attribute from all items |
-| `to_list()` | Convert to list of dictionaries |
+| Método | Descrição |
+|--------|-----------|
+| `first()` | Primeiro item ou None |
+| `count()` | Contagem de itens |
+| `pluck(key)` | Extrair um atributo de todos os itens |
+| `to_list()` | Converter para lista de dicionários |
 
-## Documentation
+## Documentação
 
-- [Getting Started](docs/getting-started.md) - Installation and basic usage
-- [Query Builder](docs/query-builder.md) - Comprehensive query guide
-- [Collections](docs/collections.md) - Working with result sets
-- [Advanced Features](docs/advanced.md) - Pagination, polymorphism, timestamps, and more
+- [Getting Started](docs/getting-started.md) - Instalação e uso básico
+- [Query Builder](docs/query-builder.md) - Guia completo de queries
+- [Collections](docs/collections.md) - Trabalhando com resultados
+- [Advanced Features](docs/advanced.md) - Configuração, paginação, timestamps e mais
 
-## Examples
-
-### Complete CRUD Example
-
-```python
-from dynolayer import DynoLayer
-
-
-class User(DynoLayer):
-    def __init__(self):
-        super().__init__(
-            entity="users",
-            required_fields=["email", "name"],
-            fillable=["id", "email", "name", "role", "status"],
-            timestamps=True
-        )
-
-
-# Create
-user = User.create({
-    "id": 1,
-    "email": "john@example.com",
-    "name": "John Doe",
-    "role": "admin"
-})
-
-# Read
-user = User.find({"id": 1})
-all_users = User.all()
-
-# Update
-user.name = "Jane Doe"
-user.save()
-
-# Delete
-user.delete()
-```
-
-### Query Example
-
-```python
-from datetime import datetime, timedelta, timezone
-
-# Complex query with multiple conditions
-yesterday = int((datetime.now(timezone.utc) - timedelta(days=1)).timestamp())
-today = int(datetime.now(timezone.utc).timestamp())
-
-active_admins = (
-    User.where("role", "admin")
-    .and_where("status", "active")
-    .where_between("created_at", yesterday, today)
-    .where_not("email", "contains", "test")
-    .index("role-index")
-    .limit(100)
-    .attributes_to_get(["id", "email", "name"])
-    .get()
-)
-
-# Process results
-for admin in active_admins:
-    print(f"{admin.name} - {admin.email}")
-
-print(f"Found {active_admins.count()} admins")
-```
-
-### Custom Validation Example
-
-```python
-class Order(DynoLayer):
-    def __init__(self):
-        super().__init__(
-            entity="orders",
-            required_fields=["user_id", "total"],
-            fillable=["id", "user_id", "items", "total", "status"],
-            timestamps=True
-        )
-
-    def save(self):
-        # Auto-calculate total from items
-        if hasattr(self, 'items') and self.items:
-            self.total = sum(item['price'] * item['quantity'] for item in self.items)
-
-        # Set default status
-        if not hasattr(self, 'status'):
-            self.status = "pending"
-
-        return super().save()
-
-    def mark_as_paid(self):
-        self.status = "paid"
-        return self.save()
-
-
-# Usage
-order = Order()
-order.id = 1
-order.user_id = 100
-order.items = [
-    {"product": "Widget", "price": 10.0, "quantity": 2},
-    {"product": "Gadget", "price": 25.0, "quantity": 1},
-]
-order.save()
-
-print(order.total)   # 45.0 (auto-calculated)
-print(order.status)  # "pending"
-
-order.mark_as_paid()
-```
-
-## License
+## Licença
 
 MIT
 
-## Contributing
+## Contribuindo
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contribuições são bem-vindas! Sinta-se à vontade para enviar um Pull Request.
