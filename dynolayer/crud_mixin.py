@@ -12,6 +12,7 @@ class CrudMixin:
     _dynamodb = None
     _client = None
     _table_keys_cache = {}
+    _table_cache = {}
 
     @classmethod
     def _get_session(cls):
@@ -67,6 +68,7 @@ class CrudMixin:
         CrudMixin._dynamodb = None
         CrudMixin._client = None
         CrudMixin._table_keys_cache.clear()
+        CrudMixin._table_cache.clear()
 
     def __init__(self, entity: str, partition_key: str = "", sort_key: str = None):
         self._entity = entity
@@ -77,7 +79,9 @@ class CrudMixin:
 
     @property
     def _table(self):
-        return self._get_dynamodb().Table(self._entity)
+        if self._entity not in CrudMixin._table_cache:
+            CrudMixin._table_cache[self._entity] = self._get_dynamodb().Table(self._entity)
+        return CrudMixin._table_cache[self._entity]
 
     def _describe(self):
         return self._get_client().describe_table(TableName=self._entity)

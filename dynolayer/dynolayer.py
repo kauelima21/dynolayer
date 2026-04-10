@@ -472,6 +472,46 @@ class DynoLayer(CrudMixin):
     def fetch(self, return_all=False) -> Collection:
         return self.get(return_all)
 
+    def stream(self):
+        self.__resolve_key_conditions()
+        self.__validate_index()
+
+        filter_expression = None
+        if self._filter_expression:
+            filter_expression = transform_params_in_filter(self._filter_expression)
+
+        use_query = self._key_condition_expression and not self._force_scan and not self._scan_all
+
+        if use_query:
+            key_condition = transform_params_in_query(self._key_condition_expression)
+            kwargs = {"KeyConditionExpression": key_condition}
+            if filter_expression:
+                kwargs["FilterExpression"] = filter_expression
+            if self._index:
+                kwargs["IndexName"] = self._index
+            if self._project_expression:
+                kwargs["ProjectionExpression"] = self._project_expression
+            op = self._table.query
+        else:
+            kwargs = {}
+            if filter_expression:
+                kwargs["FilterExpression"] = filter_expression
+            if self._project_expression:
+                kwargs["ProjectionExpression"] = self._project_expression
+            op = self._table.scan
+
+        self.__reset_query_builder()
+
+        while True:
+            response = op(**kwargs)
+            for row in response["Items"]:
+                model_instance = self.__class__()
+                model_instance._data = row.copy()
+                yield model_instance
+            if "LastEvaluatedKey" not in response:
+                break
+            kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
     def count(self) -> int:
         if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
             raise QueryException(
