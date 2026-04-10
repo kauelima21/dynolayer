@@ -674,6 +674,47 @@ product = Product.create({
 })
 ```
 
+## Otimização para Lambda
+
+### Declaração de chaves (skip describe_table)
+
+Por padrão, o DynoLayer descobre as chaves da tabela automaticamente via `describe_table`. Em AWS Lambda, essa chamada extra no cold start pode adicionar latência.
+
+Declare `partition_key` (e `sort_key` se aplicável) para eliminar essa chamada:
+
+```python
+class User(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="users",
+            fillable=["id", "email", "name"],
+            partition_key="id",  # Pula describe_table
+        )
+
+class Event(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="events",
+            fillable=["user_id", "timestamp", "type", "payload"],
+            partition_key="user_id",
+            sort_key="timestamp",
+        )
+```
+
+Com chaves declaradas:
+- `create()`, `find()`, `save()`, `delete()` funcionam **sem nenhuma API call ao DynamoDB no init**
+- Índices secundários são carregados **lazy** — apenas quando `.index()` é chamado pela primeira vez
+- Se o model não usa `.index()`, o `describe_table` nunca é chamado
+
+### Projeção no find
+
+Busque apenas os campos necessários para reduzir transferência de dados:
+
+```python
+# Busca apenas name e email (menor payload)
+user = User.find({"id": 1}, attributes=["name", "email"])
+```
+
 ## Boas Práticas
 
 ### Use índices nas suas queries

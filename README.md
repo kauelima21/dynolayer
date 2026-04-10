@@ -66,7 +66,8 @@ class User(DynoLayer):
             entity="users",                           # Nome da tabela DynamoDB
             required_fields=["email", "name"],        # Campos obrigatórios
             fillable=["id", "email", "name", "role"], # Campos permitidos para mass assignment
-            timestamps=True                           # Gerenciar created_at/updated_at automaticamente
+            timestamps=True,                          # Gerenciar created_at/updated_at automaticamente
+            partition_key="id",                       # Pula describe_table (otimiza cold start)
         )
 ```
 

@@ -119,6 +119,8 @@ class User(DynoLayer):
 - **auto_id**: Estratégia de geração automática de ID (`"uuid4"`, `"uuid1"`, `"uuid7"`, `"numeric"` ou `None`)
 - **auto_id_length**: Tamanho do UUID truncado (16-32). Apenas para estratégias UUID
 - **auto_id_table**: Nome da tabela de sequências para IDs numéricos (padrão: `"dynolayer_sequences"`)
+- **partition_key**: Nome da partition key da tabela. Quando declarado, pula o `describe_table` no init (otimiza cold start em Lambda)
+- **sort_key**: Nome da sort key da tabela (opcional, apenas se a tabela tiver sort key)
 
 ## Uso Básico
 
@@ -190,6 +192,9 @@ user = User.find_or_fail({"id": 1}, "Usuário não encontrado")
 
 # Buscar vários por chave primária (batch)
 users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
+
+# Buscar apenas campos específicos (projeção)
+user = User.find({"id": 1}, attributes=["name", "email"])
 ```
 
 ### Atualizar um registro
