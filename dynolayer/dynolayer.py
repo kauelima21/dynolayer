@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 import re
 import uuid
 import warnings
 from decimal import Decimal
-from typing import List, Dict, Literal, Any
+from typing import List, Dict, Literal, Any, Optional
+
+from boto3.dynamodb.conditions import Attr
 
 from dynolayer.config import DynoConfig
 from dynolayer.crud_mixin import CrudMixin
-from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
-from boto3.dynamodb.conditions import Attr
 from dynolayer.exceptions import (
     QueryException, ValidationException, RecordNotFoundException,
-    InvalidArgumentException, AutoIdException, ConditionalCheckException,
-)
+    InvalidArgumentException, AutoIdException, )
+from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
 
 
 class _HybridWhere:
@@ -84,16 +86,16 @@ class DynoLayer(CrudMixin):
         self._last_evaluated_key = None
         self._get_count = 0
 
-    def data(self):
+    def data(self) -> Dict:
         return self._data
 
-    def fillable(self):
+    def fillable(self) -> List[str]:
         return self._fillable
 
-    def last_evaluated_key(self):
+    def last_evaluated_key(self) -> Optional[Dict]:
         return self._last_evaluated_key
 
-    def get_count(self):
+    def get_count(self) -> int:
         return self._get_count
 
     def __getattr__(self, item):
@@ -106,18 +108,18 @@ class DynoLayer(CrudMixin):
             self._data[key] = value
 
     @classmethod
-    def configure(cls, **kwargs):
+    def configure(cls, **kwargs) -> None:
         DynoConfig.set(**kwargs)
         cls._reset_boto_clients()
 
     @classmethod
-    def all(cls):
+    def all(cls) -> DynoLayer:
         instance = cls()
         instance._scan_all = True
         return instance
 
     @classmethod
-    def find(cls, key: dict, attributes: List[str] = None):
+    def find(cls, key: dict, attributes: List[str] = None) -> Optional[DynoLayer]:
         instance = cls()
         instance.__validate_key_dict(key)
 
@@ -140,13 +142,13 @@ class DynoLayer(CrudMixin):
     where = _HybridWhere()
 
     @classmethod
-    def delete(cls, key: dict):
+    def delete(cls, key: dict) -> bool:
         instance = cls()
         instance.__validate_key_dict(key)
         return instance._delete(key)
 
     @classmethod
-    def create(cls, data: Dict, unique=False):
+    def create(cls, data: Dict, unique=False) -> DynoLayer:
         instance = cls()
 
         for key, value in data.items():
@@ -166,7 +168,7 @@ class DynoLayer(CrudMixin):
         return instance
 
     @classmethod
-    def batch_create(cls, items: List[Dict]):
+    def batch_create(cls, items: List[Dict]) -> List[DynoLayer]:
         ref_instance = cls()
         instances = []
 
@@ -214,7 +216,7 @@ class DynoLayer(CrudMixin):
         return instances
 
     @classmethod
-    def batch_find(cls, keys: List[Dict]):
+    def batch_find(cls, keys: List[Dict]) -> Collection:
         instance = cls()
         for key in keys:
             instance.__validate_key_dict(key)
@@ -229,14 +231,14 @@ class DynoLayer(CrudMixin):
         return Collection(items)
 
     @classmethod
-    def batch_destroy(cls, keys: List[Dict]):
+    def batch_destroy(cls, keys: List[Dict]) -> bool:
         instance = cls()
         for key in keys:
             instance.__validate_key_dict(key)
         return instance._batch_delete(keys)
 
     @classmethod
-    def prepare_put(cls, data: Dict):
+    def prepare_put(cls, data: Dict) -> Dict:
         instance = cls()
 
         for key, value in data.items():
@@ -252,13 +254,13 @@ class DynoLayer(CrudMixin):
         return {"Put": {"TableName": instance._entity, "Item": instance.__safe()}}
 
     @classmethod
-    def prepare_delete(cls, key: dict):
+    def prepare_delete(cls, key: dict) -> Dict:
         instance = cls()
         instance.__validate_key_dict(key)
         return {"Delete": {"TableName": instance._entity, "Key": key}}
 
     @classmethod
-    def prepare_update(cls, key: dict, data: Dict):
+    def prepare_update(cls, key: dict, data: Dict) -> Dict:
         instance = cls()
         instance.__validate_key_dict(key)
 
@@ -283,7 +285,7 @@ class DynoLayer(CrudMixin):
         }}
 
     @staticmethod
-    def transact_write(operations: List[Dict]):
+    def transact_write(operations: List[Dict]) -> bool:
         from boto3.dynamodb.types import TypeSerializer
         from dynolayer.crud_mixin import CrudMixin
 
@@ -314,7 +316,7 @@ class DynoLayer(CrudMixin):
         return True
 
     @staticmethod
-    def transact_get(requests: List[tuple]):
+    def transact_get(requests: List[tuple]) -> List[Optional[DynoLayer]]:
         from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
         from dynolayer.crud_mixin import CrudMixin
 
@@ -346,7 +348,7 @@ class DynoLayer(CrudMixin):
 
         return items
 
-    def save(self, condition=None):
+    def save(self, condition=None) -> bool:
         self.__apply_auto_id()
         self.__validate_required_fields(self._partition_keys)
         keys = {key: self.data()[key] for key in self._partition_keys}
@@ -358,47 +360,47 @@ class DynoLayer(CrudMixin):
 
         return self._update(self.__safe(self._partition_keys), keys, condition=condition)
 
-    def destroy(self):
+    def destroy(self) -> bool:
         keys = {key: self.data()[key] for key in self._partition_keys}
         return self._delete(keys)
 
-    def and_where(self, *args):
+    def and_where(self, *args) -> DynoLayer:
         attribute, condition, value = extract_params(*args)
         self.__set_filter_expression(attribute, condition, value, "AND")
 
         return self
 
-    def where_between(self, attribute: str, start: Any, end: Any):
+    def where_between(self, attribute: str, start: Any, end: Any) -> DynoLayer:
         self.__set_filter_expression(attribute, "between", [start, end], "AND")
         return self
 
-    def where_in(self, attribute: str, values_in: List[str | int]):
+    def where_in(self, attribute: str, values_in: List[str | int]) -> DynoLayer:
         self.__set_filter_expression(attribute, "in", values_in, "AND")
         return self
 
-    def or_where(self, *args):
+    def or_where(self, *args) -> DynoLayer:
         attribute, condition, value = extract_params(*args)
         self.__set_filter_expression(attribute, condition, value, "OR")
 
         return self
 
-    def where_not(self, *args):
+    def where_not(self, *args) -> DynoLayer:
         attribute, condition, value = extract_params(*args)
         self.__set_filter_expression(attribute, condition, value, "AND_NOT")
 
         return self
 
-    def or_where_not(self, *args):
+    def or_where_not(self, *args) -> DynoLayer:
         attribute, condition, value = extract_params(*args)
         self.__set_filter_expression(attribute, condition, value, "OR_NOT")
 
         return self
 
-    def limit(self, limit: int):
+    def limit(self, limit: int) -> DynoLayer:
         self._limit = limit
         return self
 
-    def attributes_to_get(self, project_expression: str | List[str]):
+    def attributes_to_get(self, project_expression: str | List[str]) -> DynoLayer:
         if isinstance(project_expression, list):
             self._project_expression = ", ".join(project_expression)
 
@@ -407,19 +409,19 @@ class DynoLayer(CrudMixin):
 
         return self
 
-    def index(self, index: str):
+    def index(self, index: str) -> DynoLayer:
         self._index = index
         return self
 
-    def force_scan(self):
+    def force_scan(self) -> DynoLayer:
         self._force_scan = True
         return self
 
-    def offset(self, last_evaluated_key: dict):
+    def offset(self, last_evaluated_key: dict) -> DynoLayer:
         self._offset = last_evaluated_key
         return self
 
-    def get(self, return_all=False):
+    def get(self, return_all=False) -> Collection:
         if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
             raise QueryException(
                 "You must specify a filter condition before executing this operation.",
@@ -464,10 +466,10 @@ class DynoLayer(CrudMixin):
 
         return Collection(items)
 
-    def fetch(self, return_all=False):
+    def fetch(self, return_all=False) -> Collection:
         return self.get(return_all)
 
-    def count(self):
+    def count(self) -> int:
         if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
             raise QueryException(
                 "You must specify a filter condition before executing this operation.",
@@ -495,7 +497,7 @@ class DynoLayer(CrudMixin):
         return total
 
     @classmethod
-    def find_or_fail(cls, key: dict, message="Record not found.", attributes: List[str] = None):
+    def find_or_fail(cls, key: dict, message="Record not found.", attributes: List[str] = None) -> DynoLayer:
         instance = cls.find(key, attributes=attributes)
         if instance is None:
             raise RecordNotFoundException(message, key=key, entity=cls.__name__)
