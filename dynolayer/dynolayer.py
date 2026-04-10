@@ -1,3 +1,4 @@
+import re
 import uuid
 import warnings
 from decimal import Decimal
@@ -11,6 +12,17 @@ from dynolayer.exceptions import (
     QueryException, ValidationException, RecordNotFoundException,
     InvalidArgumentException, AutoIdException, ConditionalCheckException,
 )
+
+
+class _HybridWhere:
+    def __get__(self, obj, cls):
+        if obj is None:
+            def class_where(*args):
+                instance = cls()
+                instance.and_where(*args)
+                return instance
+            return class_where
+        return obj.and_where
 
 
 class DynoLayer(CrudMixin):
@@ -105,13 +117,17 @@ class DynoLayer(CrudMixin):
         return instance
 
     @classmethod
-    def find(cls, key: dict):
+    def find(cls, key: dict, attributes: List[str] = None):
         instance = cls()
         instance.__validate_key_dict(key)
-        response = instance._table.get_item(
-            TableName=instance._entity,
-            Key=key
-        )
+
+        kwargs = {"TableName": instance._entity, "Key": key}
+        if attributes:
+            attr_names = {f"#proj_{i}": attr for i, attr in enumerate(attributes)}
+            kwargs["ProjectionExpression"] = ", ".join(attr_names.keys())
+            kwargs["ExpressionAttributeNames"] = attr_names
+
+        response = instance._table.get_item(**kwargs)
 
         if not response.get("Item"):
             return None
@@ -121,12 +137,7 @@ class DynoLayer(CrudMixin):
 
         return instance
 
-    @classmethod
-    def where(cls, *args):
-        instance = cls()
-        instance.and_where(*args)
-
-        return instance
+    where = _HybridWhere()
 
     @classmethod
     def delete(cls, key: dict):
@@ -255,12 +266,13 @@ class DynoLayer(CrudMixin):
         expression_names = {}
         update_parts = []
 
-        for k, value in data.items():
+        for i, (k, value) in enumerate(data.items()):
             if isinstance(value, float):
                 value = Decimal(str(value))
-            expression_values[f":{k}"] = value
-            expression_names[f"#{k}"] = k
-            update_parts.append(f"#{k} = :{k}")
+            safe = re.sub(r"[^a-zA-Z0-9_]", "_", k) + f"_{i}"
+            expression_values[f":{safe}"] = value
+            expression_names[f"#{safe}"] = k
+            update_parts.append(f"#{safe} = :{safe}")
 
         return {"Update": {
             "TableName": instance._entity,
@@ -483,8 +495,8 @@ class DynoLayer(CrudMixin):
         return total
 
     @classmethod
-    def find_or_fail(cls, key: dict, message="Record not found."):
-        instance = cls.find(key)
+    def find_or_fail(cls, key: dict, message="Record not found.", attributes: List[str] = None):
+        instance = cls.find(key, attributes=attributes)
         if instance is None:
             raise RecordNotFoundException(message, key=key, entity=cls.__name__)
         return instance

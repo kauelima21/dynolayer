@@ -1,3 +1,5 @@
+import re
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -186,10 +188,11 @@ class CrudMixin:
         expression_names = dict()
         update_expression = list()
 
-        for key, value in data.items():
-            expression_values[f":{key}"] = value
-            expression_names[f"#{key}"] = key
-            update_expression.append(f"#{key} = :{key}")
+        for i, (key, value) in enumerate(data.items()):
+            safe = re.sub(r"[^a-zA-Z0-9_]", "_", key) + f"_{i}"
+            expression_values[f":{safe}"] = value
+            expression_names[f"#{safe}"] = key
+            update_expression.append(f"#{safe} = :{safe}")
 
         update_expression = "SET " + ", ".join(update_expression)
 
