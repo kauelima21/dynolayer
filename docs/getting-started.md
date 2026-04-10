@@ -105,7 +105,8 @@ class User(DynoLayer):
             entity="users",                           # Nome da tabela
             required_fields=["email", "name"],        # Campos obrigatórios
             fillable=["id", "email", "name", "role"], # Campos permitidos para mass assignment
-            timestamps=True                           # Gerenciar created_at/updated_at
+            timestamps=True,                          # Gerenciar created_at/updated_at
+            partition_key="id",                       # Partition key da tabela
         )
 ```
 
@@ -119,7 +120,7 @@ class User(DynoLayer):
 - **auto_id**: Estratégia de geração automática de ID (`"uuid4"`, `"uuid1"`, `"uuid7"`, `"numeric"` ou `None`)
 - **auto_id_length**: Tamanho do UUID truncado (16-32). Apenas para estratégias UUID
 - **auto_id_table**: Nome da tabela de sequências para IDs numéricos (padrão: `"dynolayer_sequences"`)
-- **partition_key**: Nome da partition key da tabela. Quando declarado, pula o `describe_table` no init (otimiza cold start em Lambda)
+- **partition_key**: Nome da partition key da tabela (obrigatório)
 - **sort_key**: Nome da sort key da tabela (opcional, apenas se a tabela tiver sort key)
 
 ## Uso Básico
@@ -157,6 +158,7 @@ class Product(DynoLayer):
             required_fields=["name"],
             fillable=["id", "name", "price"],
             auto_id="uuid4",  # Gera UUID v4 automaticamente
+            partition_key="id",
         )
 
 

@@ -205,7 +205,8 @@ class User(DynoLayer):
             entity="users",
             required_fields=["email"],
             fillable=["id", "email", "name", "role", "status", "created_at"],
-            timestamps=True
+            timestamps=True,
+            partition_key="id",
         )
 
 

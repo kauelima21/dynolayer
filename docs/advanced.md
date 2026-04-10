@@ -91,7 +91,8 @@ class User(DynoLayer):
             entity="users",
             required_fields=["email"],
             fillable=["id", "email", "name"],
-            timestamps=True
+            timestamps=True,
+            partition_key="id",
         )
 ```
 
@@ -127,6 +128,7 @@ class Logs(DynoLayer):
             fillable=["id", "message", "level"],
             timestamps=True,
             timestamp_format="iso",  # Apenas este model usa ISO
+            partition_key="id",
         )
 
 class Metrics(DynoLayer):
@@ -135,6 +137,7 @@ class Metrics(DynoLayer):
             entity="metrics",
             fillable=["id", "value", "metric_name"],
             timestamps=True,
+            partition_key="id",
             # Usa o formato da configuração global (padrão: "numeric")
         )
 ```
@@ -196,6 +199,7 @@ class Product(DynoLayer):
             required_fields=["name"],
             fillable=["id", "name", "price"],
             auto_id="uuid4",
+            partition_key="id",
         )
 
 
@@ -215,6 +219,7 @@ class Product(DynoLayer):
             fillable=["id", "name"],
             auto_id="uuid4",
             auto_id_length=16,  # 16 caracteres hex
+            partition_key="id",
         )
 
 
@@ -245,6 +250,7 @@ class Order(DynoLayer):
             required_fields=["total"],
             fillable=["id", "total", "status"],
             auto_id="numeric",
+            partition_key="id",
         )
 
 
@@ -266,6 +272,7 @@ class Order(DynoLayer):
             fillable=["id", "total"],
             auto_id="numeric",
             auto_id_table="my_sequences",  # Override por model
+            partition_key="id",
         )
 ```
 
@@ -497,7 +504,8 @@ class User(DynoLayer):
         super().__init__(
             entity="users",
             required_fields=["email"],
-            fillable=["id", "email", "name"]
+            fillable=["id", "email", "name"],
+            partition_key="id",
         )
 
     def save(self):
@@ -533,7 +541,8 @@ class Order(DynoLayer):
             entity="orders",
             required_fields=["user_id", "total"],
             fillable=["id", "user_id", "items", "total", "status"],
-            timestamps=True
+            timestamps=True,
+            partition_key="id",
         )
 
     def save(self):
@@ -583,7 +592,8 @@ class User(DynoLayer):
         super().__init__(
             entity="users",
             required_fields=["email", "name"],
-            fillable=["id", "email", "name", "role"]
+            fillable=["id", "email", "name", "role"],
+            partition_key="id",
         )
 
 
@@ -608,7 +618,8 @@ class User(DynoLayer):
         super().__init__(
             entity="users",
             required_fields=["email"],
-            fillable=["id", "email", "name"]  # Apenas estes podem ser atribuídos
+            fillable=["id", "email", "name"],  # Apenas estes podem ser atribuídos
+            partition_key="id",
         )
 
 
@@ -676,11 +687,7 @@ product = Product.create({
 
 ## Otimização para Lambda
 
-### Declaração de chaves (skip describe_table)
-
-Por padrão, o DynoLayer descobre as chaves da tabela automaticamente via `describe_table`. Em AWS Lambda, essa chamada extra no cold start pode adicionar latência.
-
-Declare `partition_key` (e `sort_key` se aplicável) para eliminar essa chamada:
+O parâmetro `partition_key` (e `sort_key` quando aplicável) é obrigatório na declaração do model. Isso permite que o DynoLayer funcione sem chamar `describe_table` no init, eliminando uma API call extra que adicionaria latência no cold start em AWS Lambda.
 
 ```python
 class User(DynoLayer):
@@ -688,7 +695,7 @@ class User(DynoLayer):
         super().__init__(
             entity="users",
             fillable=["id", "email", "name"],
-            partition_key="id",  # Pula describe_table
+            partition_key="id",
         )
 
 class Event(DynoLayer):
@@ -701,7 +708,7 @@ class Event(DynoLayer):
         )
 ```
 
-Com chaves declaradas:
+Com as chaves declaradas:
 - `create()`, `find()`, `save()`, `delete()` funcionam **sem nenhuma API call ao DynamoDB no init**
 - Índices secundários são carregados **lazy** — apenas quando `.index()` é chamado pela primeira vez
 - Se o model não usa `.index()`, o `describe_table` nunca é chamado

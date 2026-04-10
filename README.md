@@ -67,7 +67,7 @@ class User(DynoLayer):
             required_fields=["email", "name"],        # Campos obrigatórios
             fillable=["id", "email", "name", "role"], # Campos permitidos para mass assignment
             timestamps=True,                          # Gerenciar created_at/updated_at automaticamente
-            partition_key="id",                       # Pula describe_table (otimiza cold start)
+            partition_key="id",                       # Partition key da tabela
         )
 ```
 
@@ -185,6 +185,7 @@ class Logs(DynoLayer):
             fillable=["id", "message", "level"],
             timestamps=True,
             timestamp_format="iso",  # Override apenas para este model
+            partition_key="id",
         )
 ```
 
