@@ -31,7 +31,8 @@ class DynoLayer(CrudMixin):
     _VALID_AUTO_ID_STRATEGIES = ("uuid4", "uuid1", "uuid7", "numeric")
 
     def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None,
-                 auto_id=None, auto_id_length=None, auto_id_table=None):
+                 auto_id=None, auto_id_length=None, auto_id_table=None,
+                 partition_key: str = None, sort_key: str = None):
         if auto_id is not None:
             if auto_id not in self._VALID_AUTO_ID_STRATEGIES:
                 raise InvalidArgumentException(
@@ -54,7 +55,7 @@ class DynoLayer(CrudMixin):
                         received=str(auto_id_length)
                     )
 
-        super().__init__(entity)
+        super().__init__(entity, partition_key=partition_key, sort_key=sort_key)
 
         if fillable is None:
             fillable = []
@@ -411,6 +412,8 @@ class DynoLayer(CrudMixin):
 
     def index(self, index: str) -> DynoLayer:
         self._index = index
+        if not self._indexes:
+            self._load_indexes()
         return self
 
     def force_scan(self) -> DynoLayer:
@@ -503,6 +506,30 @@ class DynoLayer(CrudMixin):
             raise RecordNotFoundException(message, key=key, entity=cls.__name__)
         return instance
 
+    def _load_indexes(self):
+        table_description = self._describe()["Table"]
+        indexes = {}
+        for idx in table_description.get("GlobalSecondaryIndexes", []):
+            idx_schema = idx["KeySchema"]
+            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
+            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
+            indexes[idx["IndexName"]] = {
+                "keys": [a["AttributeName"] for a in idx_schema],
+                "hash_key": idx_hash,
+                "range_key": idx_range,
+            }
+        for idx in table_description.get("LocalSecondaryIndexes", []):
+            idx_schema = idx["KeySchema"]
+            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
+            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
+            indexes[idx["IndexName"]] = {
+                "keys": [a["AttributeName"] for a in idx_schema],
+                "hash_key": idx_hash,
+                "range_key": idx_range,
+            }
+        self._indexes = indexes
+        self._all_index_keys = {key for idx in indexes.values() for key in idx["keys"]}
+
     def __apply_auto_id(self):
         if self._auto_id is None:
             return
@@ -580,8 +607,6 @@ class DynoLayer(CrudMixin):
             raise
 
     def __resolve_key_conditions(self):
-        if not self._key_condition_expression:
-            return
         if self._force_scan or self._scan_all:
             return
 
@@ -598,7 +623,18 @@ class DynoLayer(CrudMixin):
             else:
                 self._filter_expression.append({"AND": {attr: cond[attr]}})
 
+        resolved_filter = []
+        for filt in self._filter_expression:
+            operator = next(iter(filt))
+            inner = filt[operator]
+            attr = next(iter(inner))
+            if attr in valid_keys:
+                resolved_key_conditions.append({attr: inner[attr]})
+            else:
+                resolved_filter.append(filt)
+
         self._key_condition_expression = resolved_key_conditions
+        self._filter_expression = resolved_filter
 
     def __validate_key_dict(self, key: dict):
         missing = [k for k in self._partition_keys if k not in key]

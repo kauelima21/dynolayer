@@ -68,9 +68,15 @@ class CrudMixin:
         CrudMixin._client = None
         CrudMixin._table_keys_cache.clear()
 
-    def __init__(self, entity: str):
+    def __init__(self, entity: str, partition_key: str = None, sort_key: str = None):
         self._entity = entity
-        self._partition_keys, self._indexes, self._hash_key, self._range_key = self._get_index_keys()
+        if partition_key:
+            self._hash_key = partition_key
+            self._range_key = sort_key
+            self._partition_keys = [partition_key] + ([sort_key] if sort_key else [])
+            self._indexes = {}
+        else:
+            self._partition_keys, self._indexes, self._hash_key, self._range_key = self._get_index_keys()
 
     @property
     def _table(self):
