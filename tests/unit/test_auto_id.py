@@ -51,6 +51,7 @@ def get_product_uuid4():
                 fillable=["id", "name", "price"],
                 timestamps=False,
                 auto_id="uuid4",
+                partition_key="id",
             )
     return Product
 
@@ -65,6 +66,7 @@ def get_product_uuid1():
                 fillable=["id", "name", "price"],
                 timestamps=False,
                 auto_id="uuid1",
+                partition_key="id",
             )
     return Product
 
@@ -80,6 +82,7 @@ def get_product_uuid4_truncated():
                 timestamps=False,
                 auto_id="uuid4",
                 auto_id_length=16,
+                partition_key="id",
             )
     return Product
 
@@ -94,6 +97,7 @@ def get_order_numeric():
                 fillable=["id", "total", "status"],
                 timestamps=False,
                 auto_id="numeric",
+                partition_key="id",
             )
     return Order
 
@@ -233,28 +237,28 @@ class TestAutoIdValidation:
         with pytest.raises(InvalidArgumentException, match="Invalid auto_id strategy"):
             class Bad(DynoLayer):
                 def __init__(self):
-                    super().__init__(entity="t", auto_id="invalid")
+                    super().__init__(entity="t", partition_key="id", auto_id="invalid")
             Bad()
 
     def test_numeric_with_length_raises(self):
         with pytest.raises(InvalidArgumentException, match="not supported with 'numeric'"):
             class Bad(DynoLayer):
                 def __init__(self):
-                    super().__init__(entity="t", auto_id="numeric", auto_id_length=16)
+                    super().__init__(entity="t", partition_key="id", auto_id="numeric", auto_id_length=16)
             Bad()
 
     def test_length_below_minimum_raises(self):
         with pytest.raises(InvalidArgumentException, match="between 16 and 32"):
             class Bad(DynoLayer):
                 def __init__(self):
-                    super().__init__(entity="t", auto_id="uuid4", auto_id_length=8)
+                    super().__init__(entity="t", partition_key="id", auto_id="uuid4", auto_id_length=8)
             Bad()
 
     def test_length_above_maximum_raises(self):
         with pytest.raises(InvalidArgumentException, match="between 16 and 32"):
             class Bad(DynoLayer):
                 def __init__(self):
-                    super().__init__(entity="t", auto_id="uuid4", auto_id_length=40)
+                    super().__init__(entity="t", partition_key="id", auto_id="uuid4", auto_id_length=40)
             Bad()
 
 

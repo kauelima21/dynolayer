@@ -23,6 +23,7 @@ def get_order():
                 required_fields=["total"],
                 fillable=["id", "total", "status"],
                 timestamps=False,
+                partition_key="id",
             )
     return Order
 

@@ -68,15 +68,12 @@ class CrudMixin:
         CrudMixin._client = None
         CrudMixin._table_keys_cache.clear()
 
-    def __init__(self, entity: str, partition_key: str = None, sort_key: str = None):
+    def __init__(self, entity: str, partition_key: str = "", sort_key: str = None):
         self._entity = entity
-        if partition_key:
-            self._hash_key = partition_key
-            self._range_key = sort_key
-            self._partition_keys = [partition_key] + ([sort_key] if sort_key else [])
-            self._indexes = {}
-        else:
-            self._partition_keys, self._indexes, self._hash_key, self._range_key = self._get_index_keys()
+        self._hash_key = partition_key
+        self._range_key = sort_key
+        self._partition_keys = [partition_key] + ([sort_key] if sort_key else [])
+        self._indexes = {}
 
     @property
     def _table(self):
@@ -98,41 +95,6 @@ class CrudMixin:
             return current_time.isoformat()
 
         return int(current_time.timestamp())
-
-    def _get_index_keys(self):
-        if self._entity in CrudMixin._table_keys_cache:
-            return CrudMixin._table_keys_cache[self._entity]
-
-        table_description = self._describe()["Table"]
-
-        key_schema = table_description["KeySchema"]
-        primary_keys = [attr["AttributeName"] for attr in key_schema]
-        hash_key = next(attr["AttributeName"] for attr in key_schema if attr["KeyType"] == "HASH")
-        range_key = next((attr["AttributeName"] for attr in key_schema if attr["KeyType"] == "RANGE"), None)
-
-        indexes = {}
-        for index in table_description.get("GlobalSecondaryIndexes", []):
-            idx_schema = index["KeySchema"]
-            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
-            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
-            indexes[index["IndexName"]] = {
-                "keys": [a["AttributeName"] for a in idx_schema],
-                "hash_key": idx_hash,
-                "range_key": idx_range,
-            }
-
-        for index in table_description.get("LocalSecondaryIndexes", []):
-            idx_schema = index["KeySchema"]
-            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
-            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
-            indexes[index["IndexName"]] = {
-                "keys": [a["AttributeName"] for a in idx_schema],
-                "hash_key": idx_hash,
-                "range_key": idx_range,
-            }
-
-        CrudMixin._table_keys_cache[self._entity] = (primary_keys, indexes, hash_key, range_key)
-        return primary_keys, indexes, hash_key, range_key
 
     def _put(self, data: dict, condition=None):
         kwargs = {"Item": data}

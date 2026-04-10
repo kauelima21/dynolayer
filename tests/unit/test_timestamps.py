@@ -56,6 +56,7 @@ class TestTimestampIso:
                     fillable=["id", "first_name", "email", "role"],
                     timestamps=True,
                     timestamp_format="iso",
+                    partition_key="id",
                 )
 
         user = IsoUser.create({
@@ -81,6 +82,7 @@ class TestTimestampIso:
                     fillable=["id", "first_name", "email", "role"],
                     timestamps=True,
                     timestamp_format="iso",
+                    partition_key="id",
                 )
 
         user = IsoUser.create({

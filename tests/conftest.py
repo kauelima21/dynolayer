@@ -23,7 +23,8 @@ def get_user():
                 entity="users",
                 required_fields=["first_name", "email", "role"],
                 fillable=["id", "first_name", "last_name", "email", "role", "stars", "stats", "phones"],
-                timestamps=True
+                timestamps=True,
+                partition_key="id",
             )
 
     return User

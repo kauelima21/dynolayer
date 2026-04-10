@@ -32,7 +32,7 @@ class DynoLayer(CrudMixin):
 
     def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None,
                  auto_id=None, auto_id_length=None, auto_id_table=None,
-                 partition_key: str = None, sort_key: str = None):
+                 partition_key: str = "", sort_key: str = None):
         if auto_id is not None:
             if auto_id not in self._VALID_AUTO_ID_STRATEGIES:
                 raise InvalidArgumentException(
@@ -507,26 +507,34 @@ class DynoLayer(CrudMixin):
         return instance
 
     def _load_indexes(self):
-        table_description = self._describe()["Table"]
-        indexes = {}
-        for idx in table_description.get("GlobalSecondaryIndexes", []):
-            idx_schema = idx["KeySchema"]
-            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
-            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
-            indexes[idx["IndexName"]] = {
-                "keys": [a["AttributeName"] for a in idx_schema],
-                "hash_key": idx_hash,
-                "range_key": idx_range,
-            }
-        for idx in table_description.get("LocalSecondaryIndexes", []):
-            idx_schema = idx["KeySchema"]
-            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
-            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
-            indexes[idx["IndexName"]] = {
-                "keys": [a["AttributeName"] for a in idx_schema],
-                "hash_key": idx_hash,
-                "range_key": idx_range,
-            }
+        from dynolayer.crud_mixin import CrudMixin
+
+        cache_key = f"{self._entity}:indexes"
+        if cache_key in CrudMixin._table_keys_cache:
+            indexes = CrudMixin._table_keys_cache[cache_key]
+        else:
+            table_description = self._describe()["Table"]
+            indexes = {}
+            for idx in table_description.get("GlobalSecondaryIndexes", []):
+                idx_schema = idx["KeySchema"]
+                idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
+                idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
+                indexes[idx["IndexName"]] = {
+                    "keys": [a["AttributeName"] for a in idx_schema],
+                    "hash_key": idx_hash,
+                    "range_key": idx_range,
+                }
+            for idx in table_description.get("LocalSecondaryIndexes", []):
+                idx_schema = idx["KeySchema"]
+                idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
+                idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
+                indexes[idx["IndexName"]] = {
+                    "keys": [a["AttributeName"] for a in idx_schema],
+                    "hash_key": idx_hash,
+                    "range_key": idx_range,
+                }
+            CrudMixin._table_keys_cache[cache_key] = indexes
+
         self._indexes = indexes
         self._all_index_keys = {key for idx in indexes.values() for key in idx["keys"]}
 
