@@ -722,6 +722,23 @@ Busque apenas os campos necessários para reduzir transferência de dados:
 user = User.find({"id": 1}, attributes=["name", "email"])
 ```
 
+### Streaming para tabelas grandes
+
+Use `stream()` em vez de `get(return_all=True)` para processar tabelas grandes sem carregar tudo em memória. Isso previne OOM em Lambda (128MB default):
+
+```python
+# Ruim — carrega todos os registros em memória
+all_users = User.all().get(return_all=True)
+
+# Bom — processa um por um, página por página
+for user in User.all().stream():
+    process(user)
+
+# Também funciona com filtros
+for user in User.where("role", "admin").index("role-index").stream():
+    send_notification(user)
+```
+
 ## Boas Práticas
 
 ### Use índices nas suas queries

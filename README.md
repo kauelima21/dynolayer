@@ -411,6 +411,7 @@ count = User().get_count()
 | `force_scan()` | Forçar scan ao invés de query |
 | `get(return_all)` | Executar e retornar Collection |
 | `fetch(return_all)` | Alias para get() |
+| `stream()` | Iterar resultados por página sem carregar tudo em memória |
 | `count()` | Contar registros (otimizado com Select=COUNT) |
 
 ### Métodos de Instância
