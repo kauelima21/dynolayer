@@ -1,7 +1,9 @@
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from dynolayer.config import DynoConfig
+from dynolayer.exceptions import ConditionalCheckException
 
 
 class CrudMixin:
@@ -66,7 +68,7 @@ class CrudMixin:
 
     def __init__(self, entity: str):
         self._entity = entity
-        self._partition_keys, self._indexes = self._get_index_keys()
+        self._partition_keys, self._indexes, self._hash_key, self._range_key = self._get_index_keys()
 
     @property
     def _table(self):
@@ -95,21 +97,48 @@ class CrudMixin:
 
         table_description = self._describe()["Table"]
 
+        key_schema = table_description["KeySchema"]
+        primary_keys = [attr["AttributeName"] for attr in key_schema]
+        hash_key = next(attr["AttributeName"] for attr in key_schema if attr["KeyType"] == "HASH")
+        range_key = next((attr["AttributeName"] for attr in key_schema if attr["KeyType"] == "RANGE"), None)
+
         indexes = {}
-        primary_keys = [attr["AttributeName"] for attr in table_description["KeySchema"]]
         for index in table_description.get("GlobalSecondaryIndexes", []):
-            index_name = index["IndexName"]
-            indexes[index_name] = [attr["AttributeName"] for attr in index["KeySchema"]]
+            idx_schema = index["KeySchema"]
+            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
+            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
+            indexes[index["IndexName"]] = {
+                "keys": [a["AttributeName"] for a in idx_schema],
+                "hash_key": idx_hash,
+                "range_key": idx_range,
+            }
 
         for index in table_description.get("LocalSecondaryIndexes", []):
-            index_name = index["IndexName"]
-            indexes[index_name] = [attr["AttributeName"] for attr in index["KeySchema"]]
+            idx_schema = index["KeySchema"]
+            idx_hash = next(a["AttributeName"] for a in idx_schema if a["KeyType"] == "HASH")
+            idx_range = next((a["AttributeName"] for a in idx_schema if a["KeyType"] == "RANGE"), None)
+            indexes[index["IndexName"]] = {
+                "keys": [a["AttributeName"] for a in idx_schema],
+                "hash_key": idx_hash,
+                "range_key": idx_range,
+            }
 
-        CrudMixin._table_keys_cache[self._entity] = (primary_keys, indexes)
-        return primary_keys, indexes
+        CrudMixin._table_keys_cache[self._entity] = (primary_keys, indexes, hash_key, range_key)
+        return primary_keys, indexes, hash_key, range_key
 
-    def _put(self, data: dict):
-        self._table.put_item(Item=data)
+    def _put(self, data: dict, condition=None):
+        kwargs = {"Item": data}
+        if condition is not None:
+            kwargs["ConditionExpression"] = condition
+        try:
+            self._table.put_item(**kwargs)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise ConditionalCheckException(
+                    "Record already exists.",
+                    operation="put",
+                )
+            raise
 
         return True
 
@@ -152,7 +181,7 @@ class CrudMixin:
 
         return all_items
 
-    def _update(self, data: dict, index_key: dict):
+    def _update(self, data: dict, index_key: dict, condition=None):
         expression_values = dict()
         expression_names = dict()
         update_expression = list()
@@ -164,15 +193,36 @@ class CrudMixin:
 
         update_expression = "SET " + ", ".join(update_expression)
 
-        self._table.update_item(
-            Key=index_key,
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_values,
-            ExpressionAttributeNames=expression_names,
-            ReturnValues="UPDATED_NEW",
-        )
+        kwargs = {
+            "Key": index_key,
+            "UpdateExpression": update_expression,
+            "ExpressionAttributeValues": expression_values,
+            "ExpressionAttributeNames": expression_names,
+            "ReturnValues": "UPDATED_NEW",
+        }
+        if condition is not None:
+            kwargs["ConditionExpression"] = condition
+
+        try:
+            self._table.update_item(**kwargs)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise ConditionalCheckException(
+                    "Conditional check failed on update.",
+                    operation="update",
+                    key=index_key,
+                )
+            raise
 
         return True
+
+    def _transact_write(self, operations: list):
+        self._get_client().transact_write_items(TransactItems=operations)
+        return True
+
+    def _transact_get(self, requests: list):
+        response = self._get_client().transact_get_items(TransactItems=requests)
+        return [item.get("Item", {}) for item in response.get("Responses", [])]
 
     def _query(self, key_condition: str, filter_expression=None, index=None,
                limit=None, return_all=False, pe=None, offset=None):

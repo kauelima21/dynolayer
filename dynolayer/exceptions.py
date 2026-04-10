@@ -129,6 +129,25 @@ class RecordNotFoundException(DynoLayerException):
         super().__init__(message, details)
 
 
+class ConditionalCheckException(DynoLayerException):
+    """
+    Exception raised when a conditional write fails.
+
+    This exception wraps DynamoDB's ConditionalCheckFailedException,
+    raised when a condition expression evaluates to false (e.g., unique create
+    on an existing record).
+    """
+
+    def __init__(self, message="Conditional check failed.", operation=None, key=None):
+        details = {}
+        if operation:
+            details['operation'] = operation
+        if key:
+            details['key'] = str(key)
+
+        super().__init__(message, details)
+
+
 class AutoIdException(DynoLayerException):
     """
     Exception raised for auto-ID generation errors.

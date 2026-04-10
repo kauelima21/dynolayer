@@ -7,4 +7,5 @@ from .exceptions import (
     RecordNotFoundException,
     InvalidArgumentException,
     AutoIdException,
+    ConditionalCheckException,
 )

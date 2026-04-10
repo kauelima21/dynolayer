@@ -332,6 +332,89 @@ O DynoLayer aplica chunking automático respeitando os limites do DynamoDB:
 
 Itens não processados são automaticamente reenviados.
 
+## create() vs save()
+
+O DynoLayer oferece dois caminhos para criar registros:
+
+| Método | Operação DynamoDB | Comportamento |
+|--------|------------------|---------------|
+| `create()` | PutItem | Substitui o item inteiro. Ideal para novos registros. |
+| `save()` | UpdateItem | Upsert — cria se não existe, atualiza campos específicos se existe. |
+
+```python
+# create() — PutItem: sempre substitui o item inteiro
+user = User.create({"id": 1, "email": "john@example.com", "name": "John"})
+
+# save() — UpdateItem: atualiza apenas os campos definidos
+user = User()
+user.id = 1
+user.email = "john@example.com"
+user.save()  # Cria se não existe, atualiza se existe
+```
+
+### Escrita condicional (unique create)
+
+Use `unique=True` para garantir que o `create()` não sobrescreva um registro existente:
+
+```python
+from dynolayer.exceptions import ConditionalCheckException
+
+try:
+    user = User.create({"id": 1, "email": "john@example.com", "name": "John"}, unique=True)
+except ConditionalCheckException:
+    print("Registro com id=1 já existe!")
+```
+
+### Condição no save()
+
+Passe uma condição boto3 para `save()` para escrita condicional:
+
+```python
+from boto3.dynamodb.conditions import Attr
+
+user = User.find({"id": 1})
+user.name = "Jane"
+
+# Só atualiza se o role for "admin"
+user.save(condition=Attr("role").eq("admin"))
+```
+
+## Transações
+
+O DynoLayer suporta transações atômicas do DynamoDB (até 25 operações por transação, all-or-nothing).
+
+### Escrita transacional
+
+```python
+from dynolayer import DynoLayer
+
+DynoLayer.transact_write([
+    User.prepare_put({"id": 1, "email": "john@example.com", "name": "John"}),
+    Order.prepare_put({"id": 100, "user_id": 1, "total": 50}),
+    CartItem.prepare_delete({"id": 1}),
+])
+```
+
+### Helpers disponíveis
+
+| Helper | Descrição |
+|--------|-----------|
+| `prepare_put(data)` | Prepara inserção (aplica fillable, auto_id, timestamps) |
+| `prepare_delete(key)` | Prepara deleção por chave |
+| `prepare_update(key, data)` | Prepara atualização de campos específicos |
+
+### Leitura transacional
+
+```python
+results = DynoLayer.transact_get([
+    (User, {"id": 1}),
+    (Order, {"id": 100}),
+])
+
+user = results[0]   # Instância de User (ou None)
+order = results[1]  # Instância de Order (ou None)
+```
+
 ## Paginação
 
 O DynamoDB retorna resultados em páginas (até 1MB por página). O DynoLayer oferece suporte a paginação automática e manual.

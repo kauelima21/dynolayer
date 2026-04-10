@@ -12,8 +12,10 @@ Uma biblioteca Python para DynamoDB que traz a elegância do Eloquent ORM (Larav
 - **Suporte a Índices**: Query usando Global e Local Secondary Indexes
 - **Auto-ID**: Geração automática de IDs (UUID v4/v1/v7 ou numérico incremental) por model
 - **Batch Operations**: Operações em lote para create, find e destroy
+- **Escrita Condicional**: `unique=True` no create e condições no save para escrita segura
+- **Transações**: Escrita e leitura transacional atômica via `transact_write`/`transact_get`
 - **Configuração Centralizada**: API de configuração para credenciais AWS, timestamps e retry
-- **Type Safety**: Conversão automática de tipos para compatibilidade com DynamoDB
+- **Type Safety**: Conversão automática de tipos e resolução inteligente de key conditions
 
 ## Instalação
 
@@ -379,11 +381,16 @@ count = User().get_count()
 | `find(key)` | Buscar registro por chave primária |
 | `find_or_fail(key, message)` | Buscar ou lançar exceção |
 | `where(*args)` | Iniciar query builder |
-| `create(data)` | Criar e salvar registro |
+| `create(data, unique)` | Criar e salvar registro (`unique=True` previne sobrescrita) |
 | `delete(key)` | Deletar registro por chave |
 | `batch_create(items)` | Criar vários registros em lote |
 | `batch_find(keys)` | Buscar vários por chave primária |
 | `batch_destroy(keys)` | Deletar vários registros em lote |
+| `transact_write(operations)` | Escrita transacional atômica (até 25 operações) |
+| `transact_get(requests)` | Leitura transacional atômica |
+| `prepare_put(data)` | Preparar operação Put para transação |
+| `prepare_delete(key)` | Preparar operação Delete para transação |
+| `prepare_update(key, data)` | Preparar operação Update para transação |
 
 ### Métodos do Query Builder
 
@@ -408,7 +415,7 @@ count = User().get_count()
 
 | Método | Descrição |
 |--------|-----------|
-| `save()` | Criar ou atualizar registro |
+| `save(condition)` | Criar ou atualizar registro (com condição opcional) |
 | `destroy()` | Deletar registro atual |
 | `data()` | Obter dicionário interno de dados |
 | `fillable()` | Obter lista de campos preenchíveis |

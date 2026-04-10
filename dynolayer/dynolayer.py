@@ -6,9 +6,10 @@ from typing import List, Dict, Literal, Any
 from dynolayer.config import DynoConfig
 from dynolayer.crud_mixin import CrudMixin
 from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
+from boto3.dynamodb.conditions import Attr
 from dynolayer.exceptions import (
     QueryException, ValidationException, RecordNotFoundException,
-    InvalidArgumentException, AutoIdException,
+    InvalidArgumentException, AutoIdException, ConditionalCheckException,
 )
 
 
@@ -54,7 +55,7 @@ class DynoLayer(CrudMixin):
         self._auto_id = auto_id
         self._auto_id_length = auto_id_length
         self._auto_id_table = auto_id_table
-        self._all_index_keys = {key for keys in self._indexes.values() for key in keys}
+        self._all_index_keys = {key for idx in self._indexes.values() for key in idx["keys"]}
 
         self._index = None
         self._limit = None
@@ -134,7 +135,7 @@ class DynoLayer(CrudMixin):
         return instance._delete(key)
 
     @classmethod
-    def create(cls, data: Dict):
+    def create(cls, data: Dict, unique=False):
         instance = cls()
 
         for key, value in data.items():
@@ -148,7 +149,8 @@ class DynoLayer(CrudMixin):
             instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
             instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
 
-        instance._put(instance.__safe())
+        condition = Attr(instance._hash_key).not_exists() if unique else None
+        instance._put(instance.__safe(), condition=condition)
 
         return instance
 
@@ -222,7 +224,117 @@ class DynoLayer(CrudMixin):
             instance.__validate_key_dict(key)
         return instance._batch_delete(keys)
 
-    def save(self):
+    @classmethod
+    def prepare_put(cls, data: Dict):
+        instance = cls()
+
+        for key, value in data.items():
+            if key in instance.fillable():
+                instance._data[key] = value
+
+        instance.__apply_auto_id()
+
+        if instance._timestamps:
+            instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
+            instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
+
+        return {"Put": {"TableName": instance._entity, "Item": instance.__safe()}}
+
+    @classmethod
+    def prepare_delete(cls, key: dict):
+        instance = cls()
+        instance.__validate_key_dict(key)
+        return {"Delete": {"TableName": instance._entity, "Key": key}}
+
+    @classmethod
+    def prepare_update(cls, key: dict, data: Dict):
+        instance = cls()
+        instance.__validate_key_dict(key)
+
+        expression_values = {}
+        expression_names = {}
+        update_parts = []
+
+        for k, value in data.items():
+            if isinstance(value, float):
+                value = Decimal(str(value))
+            expression_values[f":{k}"] = value
+            expression_names[f"#{k}"] = k
+            update_parts.append(f"#{k} = :{k}")
+
+        return {"Update": {
+            "TableName": instance._entity,
+            "Key": key,
+            "UpdateExpression": "SET " + ", ".join(update_parts),
+            "ExpressionAttributeValues": expression_values,
+            "ExpressionAttributeNames": expression_names,
+        }}
+
+    @staticmethod
+    def transact_write(operations: List[Dict]):
+        from boto3.dynamodb.types import TypeSerializer
+        from dynolayer.crud_mixin import CrudMixin
+
+        serializer = TypeSerializer()
+        serialized_ops = []
+
+        for op in operations:
+            serialized_op = {}
+            for op_type, params in op.items():
+                serialized_params = dict(params)
+                if "Item" in serialized_params:
+                    serialized_params["Item"] = {
+                        k: serializer.serialize(v) for k, v in serialized_params["Item"].items()
+                    }
+                if "Key" in serialized_params:
+                    serialized_params["Key"] = {
+                        k: serializer.serialize(v) for k, v in serialized_params["Key"].items()
+                    }
+                if "ExpressionAttributeValues" in serialized_params:
+                    serialized_params["ExpressionAttributeValues"] = {
+                        k: serializer.serialize(v) for k, v in serialized_params["ExpressionAttributeValues"].items()
+                    }
+                serialized_op[op_type] = serialized_params
+            serialized_ops.append(serialized_op)
+
+        client = CrudMixin._get_client()
+        client.transact_write_items(TransactItems=serialized_ops)
+        return True
+
+    @staticmethod
+    def transact_get(requests: List[tuple]):
+        from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
+        from dynolayer.crud_mixin import CrudMixin
+
+        serializer = TypeSerializer()
+        deserializer = TypeDeserializer()
+        order = []
+        transact_items = []
+
+        for model_cls, key in requests:
+            instance = model_cls()
+            instance._DynoLayer__validate_key_dict(key)
+            serialized_key = {k: serializer.serialize(v) for k, v in key.items()}
+            transact_items.append({"Get": {"TableName": instance._entity, "Key": serialized_key}})
+            order.append(model_cls)
+
+        client = CrudMixin._get_client()
+        response = client.transact_get_items(TransactItems=transact_items)
+
+        items = []
+        for i, resp in enumerate(response.get("Responses", [])):
+            raw = resp.get("Item")
+            if raw:
+                deserialized = {k: deserializer.deserialize(v) for k, v in raw.items()}
+                model_instance = order[i]()
+                model_instance._data = deserialized
+                items.append(model_instance)
+            else:
+                items.append(None)
+
+        return items
+
+    def save(self, condition=None):
         self.__apply_auto_id()
         self.__validate_required_fields(self._partition_keys)
         keys = {key: self.data()[key] for key in self._partition_keys}
@@ -232,7 +344,7 @@ class DynoLayer(CrudMixin):
                 "created_at") else self._get_current_timestamp(self._timestamp_format)
             self._data["updated_at"] = self._get_current_timestamp(self._timestamp_format)
 
-        return self._update(self.__safe(self._partition_keys), keys)
+        return self._update(self.__safe(self._partition_keys), keys, condition=condition)
 
     def destroy(self):
         keys = {key: self.data()[key] for key in self._partition_keys}
@@ -306,6 +418,7 @@ class DynoLayer(CrudMixin):
                 ]
             )
 
+        self.__resolve_key_conditions()
         self.__validate_index()
 
         filter_expression = None
@@ -353,6 +466,7 @@ class DynoLayer(CrudMixin):
                 ]
             )
 
+        self.__resolve_key_conditions()
         self.__validate_index()
 
         filter_expression = None
@@ -451,6 +565,27 @@ class DynoLayer(CrudMixin):
                 )
             raise
 
+    def __resolve_key_conditions(self):
+        if not self._key_condition_expression:
+            return
+        if self._force_scan or self._scan_all:
+            return
+
+        if self._index:
+            valid_keys = set(self._indexes[self._index]["keys"]) if self._index in self._indexes else set()
+        else:
+            valid_keys = set(self._partition_keys)
+
+        resolved_key_conditions = []
+        for cond in self._key_condition_expression:
+            attr = next(iter(cond))
+            if attr in valid_keys:
+                resolved_key_conditions.append(cond)
+            else:
+                self._filter_expression.append({"AND": {attr: cond[attr]}})
+
+        self._key_condition_expression = resolved_key_conditions
+
     def __validate_key_dict(self, key: dict):
         missing = [k for k in self._partition_keys if k not in key]
         if missing:
@@ -470,12 +605,12 @@ class DynoLayer(CrudMixin):
                 suggestions=[f"Available indexes: {', '.join(self._indexes.keys())}"]
             )
 
-        index_keys = self._indexes[self._index]
+        index_info = self._indexes[self._index]
         condition_keys = set()
         for cond in self._key_condition_expression:
             condition_keys.update(cond.keys())
 
-        partition_key = index_keys[0]
+        partition_key = index_info["hash_key"]
         if partition_key not in condition_keys:
             raise QueryException(
                 f"Index '{self._index}' requires partition key '{partition_key}' in the query condition.",
