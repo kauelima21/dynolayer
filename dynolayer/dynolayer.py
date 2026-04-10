@@ -4,7 +4,7 @@ from typing import List, Dict, Literal, Any
 from dynolayer.config import DynoConfig
 from dynolayer.crud_mixin import CrudMixin
 from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
-from dynolayer.exceptions import QueryException, ValidationException, RecordNotFoundException
+from dynolayer.exceptions import QueryException, ValidationException, RecordNotFoundException, InvalidArgumentException
 
 
 class DynoLayer(CrudMixin):
@@ -21,6 +21,7 @@ class DynoLayer(CrudMixin):
         self._timestamps = timestamps
         self._timestamp_format = timestamp_format
         self._fillable = fillable
+        self._all_index_keys = {key for keys in self._indexes.values() for key in keys}
 
         self._index = None
         self._limit = None
@@ -72,6 +73,7 @@ class DynoLayer(CrudMixin):
     @classmethod
     def find(cls, key: dict):
         instance = cls()
+        instance.__validate_key_dict(key)
         response = instance._table.get_item(
             TableName=instance._entity,
             Key=key
@@ -95,6 +97,7 @@ class DynoLayer(CrudMixin):
     @classmethod
     def delete(cls, key: dict):
         instance = cls()
+        instance.__validate_key_dict(key)
         return instance._delete(key)
 
     @classmethod
@@ -142,6 +145,8 @@ class DynoLayer(CrudMixin):
     @classmethod
     def batch_find(cls, keys: List[Dict]):
         instance = cls()
+        for key in keys:
+            instance.__validate_key_dict(key)
         raw_items = instance._batch_get(keys)
 
         items = []
@@ -155,6 +160,8 @@ class DynoLayer(CrudMixin):
     @classmethod
     def batch_destroy(cls, keys: List[Dict]):
         instance = cls()
+        for key in keys:
+            instance.__validate_key_dict(key)
         return instance._batch_delete(keys)
 
     def save(self):
@@ -240,6 +247,8 @@ class DynoLayer(CrudMixin):
                 ]
             )
 
+        self.__validate_index()
+
         filter_expression = None
         if self._filter_expression:
             filter_expression = transform_params_in_filter(self._filter_expression)
@@ -285,6 +294,8 @@ class DynoLayer(CrudMixin):
                 ]
             )
 
+        self.__validate_index()
+
         filter_expression = None
         if self._filter_expression:
             filter_expression = transform_params_in_filter(self._filter_expression)
@@ -304,6 +315,38 @@ class DynoLayer(CrudMixin):
         if instance is None:
             raise RecordNotFoundException(message, key=key, entity=cls.__name__)
         return instance
+
+    def __validate_key_dict(self, key: dict):
+        missing = [k for k in self._partition_keys if k not in key]
+        if missing:
+            raise ValidationException(
+                f"Missing primary key(s): {', '.join(missing)}.",
+                required_fields=self._partition_keys
+            )
+
+    def __validate_index(self):
+        if not self._index:
+            return
+
+        if self._index not in self._indexes:
+            raise QueryException(
+                f"Index '{self._index}' does not exist on table '{self._entity}'.",
+                operation="get",
+                suggestions=[f"Available indexes: {', '.join(self._indexes.keys())}"]
+            )
+
+        index_keys = self._indexes[self._index]
+        condition_keys = set()
+        for cond in self._key_condition_expression:
+            condition_keys.update(cond.keys())
+
+        partition_key = index_keys[0]
+        if partition_key not in condition_keys:
+            raise QueryException(
+                f"Index '{self._index}' requires partition key '{partition_key}' in the query condition.",
+                operation="get",
+                suggestions=[f"Add .where('{partition_key}', <value>) to your query"]
+            )
 
     def __validate_required_fields(self, custom_data: List[str] = None):
         required = self._required_fields
@@ -333,8 +376,7 @@ class DynoLayer(CrudMixin):
 
     def __set_filter_expression(self, attribute: str, condition: str, value: str | int | List[str | int] | None,
                                 filter_operator: Literal["AND", "OR", "AND_NOT", "OR_NOT"]):
-        keys = [*self._partition_keys, *self._indexes]
-        keys = list(set(keys))
+        keys = set(self._partition_keys) | self._all_index_keys
         if attribute in keys:
             self._key_condition_expression.append({attribute: (condition, value)})
         else:

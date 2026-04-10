@@ -95,13 +95,15 @@ class CrudMixin:
 
         table_description = self._describe()["Table"]
 
-        indexes = list()
+        indexes = {}
         primary_keys = [attr["AttributeName"] for attr in table_description["KeySchema"]]
         for index in table_description.get("GlobalSecondaryIndexes", []):
-            indexes.extend([attr["AttributeName"] for attr in index["KeySchema"]])
+            index_name = index["IndexName"]
+            indexes[index_name] = [attr["AttributeName"] for attr in index["KeySchema"]]
 
         for index in table_description.get("LocalSecondaryIndexes", []):
-            indexes.extend([attr["AttributeName"] for attr in index["KeySchema"]])
+            index_name = index["IndexName"]
+            indexes[index_name] = [attr["AttributeName"] for attr in index["KeySchema"]]
 
         CrudMixin._table_keys_cache[self._entity] = (primary_keys, indexes)
         return primary_keys, indexes
