@@ -129,6 +129,24 @@ class RecordNotFoundException(DynoLayerException):
         super().__init__(message, details)
 
 
+class AutoIdException(DynoLayerException):
+    """
+    Exception raised for auto-ID generation errors.
+
+    This exception is raised when auto-ID generation fails,
+    such as when the sequences table does not exist or is inaccessible.
+    """
+
+    def __init__(self, message, strategy=None, entity=None):
+        details = {}
+        if strategy:
+            details['strategy'] = strategy
+        if entity:
+            details['entity'] = entity
+
+        super().__init__(message, details)
+
+
 class InvalidArgumentException(DynoLayerException):
     """
     Exception raised for invalid arguments.

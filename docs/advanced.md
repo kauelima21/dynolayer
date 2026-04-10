@@ -173,6 +173,114 @@ DynoLayer.configure(timestamp_timezone="UTC")
 # export TIMESTAMP_TIMEZONE=UTC
 ```
 
+## Auto-ID
+
+O DynoLayer pode gerar IDs automaticamente para a partition key do seu model. A configuração é por model — cada tabela pode usar uma estratégia diferente.
+
+### Estratégias disponíveis
+
+| Estratégia | Tipo | Descrição |
+|-----------|------|-----------|
+| `"uuid4"` | `str` | UUID v4 aleatório (recomendado) |
+| `"uuid1"` | `str` | UUID v1 (time-based + MAC address) |
+| `"uuid7"` | `str` | UUID v7 time-ordered (Python 3.14+, fallback para uuid4) |
+| `"numeric"` | `int` | Inteiro incremental via tabela de sequências |
+
+### UUID
+
+```python
+class Product(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="products",
+            required_fields=["name"],
+            fillable=["id", "name", "price"],
+            auto_id="uuid4",
+        )
+
+
+product = Product.create({"name": "Widget"})
+print(product.id)  # "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+```
+
+### UUID truncado
+
+Use `auto_id_length` para gerar IDs mais curtos (mínimo 16, máximo 32 caracteres hex):
+
+```python
+class Product(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="products",
+            fillable=["id", "name"],
+            auto_id="uuid4",
+            auto_id_length=16,  # 16 caracteres hex
+        )
+
+
+product = Product.create({"name": "Widget"})
+print(product.id)  # "a1b2c3d4e5f64a7b"
+```
+
+### Numérico incremental
+
+Usa uma tabela DynamoDB auxiliar com contadores atômicos, similar a sequences do PostgreSQL. Seguro para execuções concorrentes (ex: múltiplas Lambdas).
+
+#### Setup da tabela de sequências
+
+Crie a tabela de sequências no DynamoDB (via console, CloudFormation, SAM, etc):
+
+```
+Table name: dynolayer_sequences  (ou nome customizado)
+Partition key: entity (String)
+```
+
+#### Uso
+
+```python
+class Order(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="orders",
+            required_fields=["total"],
+            fillable=["id", "total", "status"],
+            auto_id="numeric",
+        )
+
+
+order1 = Order.create({"total": 100, "status": "pending"})
+order2 = Order.create({"total": 200, "status": "pending"})
+print(order1.id)  # 1
+print(order2.id)  # 2
+```
+
+#### Tabela de sequências customizada
+
+Por model:
+
+```python
+class Order(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="orders",
+            fillable=["id", "total"],
+            auto_id="numeric",
+            auto_id_table="my_sequences",  # Override por model
+        )
+```
+
+Ou globalmente:
+
+```python
+DynoLayer.configure(auto_id_table="my_sequences")
+```
+
+### Comportamento
+
+- O ID é gerado **apenas quando a partition key não está presente** nos dados. Se você fornecer um ID explícito, ele será usado.
+- Funciona com `create()`, `batch_create()` e `save()`.
+- Em `batch_create()` com estratégia `numeric`, os IDs são gerados em uma única chamada atômica ao DynamoDB para melhor performance.
+
 ## Batch Operations
 
 Operações em lote para melhor performance, especialmente em AWS Lambda onde o tempo de execução é custo.

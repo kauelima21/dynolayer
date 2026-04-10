@@ -12,6 +12,7 @@ class DynoConfig:
         "timestamp_timezone": "America/Sao_Paulo",
         "retry_max_attempts": 3,
         "retry_mode": "adaptive",
+        "auto_id_table": "dynolayer_sequences",
     }
 
     _env_map = {

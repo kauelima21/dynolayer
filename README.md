@@ -10,6 +10,7 @@ Uma biblioteca Python para DynamoDB que traz a elegância do Eloquent ORM (Larav
 - **Timestamps Automáticos**: Gerenciamento opcional de `created_at` e `updated_at` (numérico ou ISO 8601)
 - **Proteção de Mass Assignment**: Whitelist de campos para prevenir dados indesejados
 - **Suporte a Índices**: Query usando Global e Local Secondary Indexes
+- **Auto-ID**: Geração automática de IDs (UUID v4/v1/v7 ou numérico incremental) por model
 - **Batch Operations**: Operações em lote para create, find e destroy
 - **Configuração Centralizada**: API de configuração para credenciais AWS, timestamps e retry
 - **Type Safety**: Conversão automática de tipos para compatibilidade com DynamoDB
@@ -162,6 +163,7 @@ O DynoLayer oferece uma API de configuração centralizada via `DynoLayer.config
 | `timestamp_timezone` | `TIMESTAMP_TIMEZONE` ou `"America/Sao_Paulo"` | Timezone para timestamps |
 | `retry_max_attempts` | `3` | Máximo de tentativas para retry |
 | `retry_mode` | `"adaptive"` | Modo de retry do boto3: `"standard"` ou `"adaptive"` |
+| `auto_id_table` | `"dynolayer_sequences"` | Tabela de sequências para IDs numéricos |
 
 ### Prioridade de resolução
 

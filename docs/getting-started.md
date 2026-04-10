@@ -116,6 +116,9 @@ class User(DynoLayer):
 - **fillable**: Whitelist de campos que podem ser atribuídos em massa (proteção contra dados indesejados)
 - **timestamps**: Quando `True`, adiciona automaticamente `created_at` e `updated_at`
 - **timestamp_format**: Override do formato de timestamp para este model (`"numeric"` ou `"iso"`)
+- **auto_id**: Estratégia de geração automática de ID (`"uuid4"`, `"uuid1"`, `"uuid7"`, `"numeric"` ou `None`)
+- **auto_id_length**: Tamanho do UUID truncado (16-32). Apenas para estratégias UUID
+- **auto_id_table**: Nome da tabela de sequências para IDs numéricos (padrão: `"dynolayer_sequences"`)
 
 ## Uso Básico
 
@@ -137,6 +140,31 @@ user.email = "john@example.com"
 user.name = "John Doe"
 user.role = "admin"
 user.save()
+```
+
+### Criar com ID automático
+
+```python
+from dynolayer import DynoLayer
+
+
+class Product(DynoLayer):
+    def __init__(self):
+        super().__init__(
+            entity="products",
+            required_fields=["name"],
+            fillable=["id", "name", "price"],
+            auto_id="uuid4",  # Gera UUID v4 automaticamente
+        )
+
+
+# ID gerado automaticamente
+product = Product.create({"name": "Widget", "price": 29.99})
+print(product.id)  # "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+
+# Ou forneça manualmente — o auto_id é ignorado
+product = Product.create({"id": "custom-id", "name": "Gadget", "price": 49.99})
+print(product.id)  # "custom-id"
 ```
 
 ### Criar em lote

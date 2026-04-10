@@ -1,14 +1,44 @@
+import uuid
+import warnings
 from decimal import Decimal
 from typing import List, Dict, Literal, Any
 
 from dynolayer.config import DynoConfig
 from dynolayer.crud_mixin import CrudMixin
 from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
-from dynolayer.exceptions import QueryException, ValidationException, RecordNotFoundException, InvalidArgumentException
+from dynolayer.exceptions import (
+    QueryException, ValidationException, RecordNotFoundException,
+    InvalidArgumentException, AutoIdException,
+)
 
 
 class DynoLayer(CrudMixin):
-    def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None):
+    _VALID_AUTO_ID_STRATEGIES = ("uuid4", "uuid1", "uuid7", "numeric")
+
+    def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None,
+                 auto_id=None, auto_id_length=None, auto_id_table=None):
+        if auto_id is not None:
+            if auto_id not in self._VALID_AUTO_ID_STRATEGIES:
+                raise InvalidArgumentException(
+                    f"Invalid auto_id strategy: '{auto_id}'",
+                    method="__init__",
+                    expected=f"One of: {', '.join(self._VALID_AUTO_ID_STRATEGIES)}",
+                    received=auto_id
+                )
+            if auto_id_length is not None:
+                if auto_id == "numeric":
+                    raise InvalidArgumentException(
+                        "auto_id_length is not supported with 'numeric' strategy.",
+                        method="__init__"
+                    )
+                if not isinstance(auto_id_length, int) or auto_id_length < 16 or auto_id_length > 32:
+                    raise InvalidArgumentException(
+                        "auto_id_length must be an integer between 16 and 32.",
+                        method="__init__",
+                        expected="integer between 16 and 32",
+                        received=str(auto_id_length)
+                    )
+
         super().__init__(entity)
 
         if fillable is None:
@@ -21,6 +51,9 @@ class DynoLayer(CrudMixin):
         self._timestamps = timestamps
         self._timestamp_format = timestamp_format
         self._fillable = fillable
+        self._auto_id = auto_id
+        self._auto_id_length = auto_id_length
+        self._auto_id_table = auto_id_table
         self._all_index_keys = {key for keys in self._indexes.values() for key in keys}
 
         self._index = None
@@ -108,6 +141,7 @@ class DynoLayer(CrudMixin):
             if key in instance.fillable():
                 instance._data[key] = value
 
+        instance.__apply_auto_id()
         instance.__validate_required_fields()
 
         if instance._timestamps:
@@ -120,14 +154,38 @@ class DynoLayer(CrudMixin):
 
     @classmethod
     def batch_create(cls, items: List[Dict]):
+        ref_instance = cls()
         instances = []
 
+        # Pre-generate numeric IDs in a single atomic call
+        numeric_ids = None
+        if ref_instance._auto_id == "numeric":
+            items_needing_id = []
+            pk_field = ref_instance._partition_keys[0]
+            for data in items:
+                if pk_field not in data or data.get(pk_field) is None:
+                    items_needing_id.append(True)
+                else:
+                    items_needing_id.append(False)
+            count = sum(items_needing_id)
+            if count > 0:
+                numeric_ids = ref_instance.__generate_numeric_id_batch(count)
+
+        numeric_id_index = 0
         for data in items:
             instance = cls()
 
             for key, value in data.items():
                 if key in instance.fillable():
                     instance._data[key] = value
+
+            if numeric_ids is not None:
+                pk_field = instance._partition_keys[0]
+                if pk_field not in instance._data or instance._data.get(pk_field) is None:
+                    instance._data[pk_field] = numeric_ids[numeric_id_index]
+                    numeric_id_index += 1
+            else:
+                instance.__apply_auto_id()
 
             instance.__validate_required_fields()
 
@@ -165,6 +223,7 @@ class DynoLayer(CrudMixin):
         return instance._batch_delete(keys)
 
     def save(self):
+        self.__apply_auto_id()
         self.__validate_required_fields(self._partition_keys)
         keys = {key: self.data()[key] for key in self._partition_keys}
 
@@ -315,6 +374,82 @@ class DynoLayer(CrudMixin):
         if instance is None:
             raise RecordNotFoundException(message, key=key, entity=cls.__name__)
         return instance
+
+    def __apply_auto_id(self):
+        if self._auto_id is None:
+            return
+
+        pk_field = self._partition_keys[0]
+        if pk_field in self._data and self._data[pk_field] is not None:
+            return
+
+        if self._auto_id in ("uuid4", "uuid1", "uuid7"):
+            self._data[pk_field] = self.__generate_uuid_id()
+        elif self._auto_id == "numeric":
+            self._data[pk_field] = self.__generate_numeric_id()
+
+    def __generate_uuid_id(self):
+        generators = {
+            "uuid4": uuid.uuid4,
+            "uuid1": uuid.uuid1,
+        }
+
+        if self._auto_id == "uuid7":
+            if hasattr(uuid, "uuid7"):
+                generators["uuid7"] = uuid.uuid7
+            else:
+                warnings.warn("uuid7 requires Python 3.14+. Falling back to uuid4.", RuntimeWarning, stacklevel=4)
+                generators["uuid7"] = uuid.uuid4
+
+        generated = str(generators[self._auto_id]())
+
+        if self._auto_id_length is not None:
+            return generated.replace("-", "")[:self._auto_id_length]
+
+        return generated
+
+    def __generate_numeric_id(self):
+        table_name = self._auto_id_table or DynoConfig.get("auto_id_table")
+        try:
+            response = self._get_dynamodb().Table(table_name).update_item(
+                Key={"entity": self._entity},
+                UpdateExpression="ADD #counter :inc",
+                ExpressionAttributeNames={"#counter": "current_value"},
+                ExpressionAttributeValues={":inc": 1},
+                ReturnValues="UPDATED_NEW"
+            )
+            return int(response["Attributes"]["current_value"])
+        except Exception as e:
+            if "ResourceNotFoundException" in type(e).__name__ or "ResourceNotFound" in str(e):
+                raise AutoIdException(
+                    f"Sequences table '{table_name}' not found. "
+                    f"Create it with partition key 'entity' (String).",
+                    strategy="numeric",
+                    entity=self._entity
+                )
+            raise
+
+    def __generate_numeric_id_batch(self, count):
+        table_name = self._auto_id_table or DynoConfig.get("auto_id_table")
+        try:
+            response = self._get_dynamodb().Table(table_name).update_item(
+                Key={"entity": self._entity},
+                UpdateExpression="ADD #counter :inc",
+                ExpressionAttributeNames={"#counter": "current_value"},
+                ExpressionAttributeValues={":inc": count},
+                ReturnValues="UPDATED_NEW"
+            )
+            end = int(response["Attributes"]["current_value"])
+            return list(range(end - count + 1, end + 1))
+        except Exception as e:
+            if "ResourceNotFoundException" in type(e).__name__ or "ResourceNotFound" in str(e):
+                raise AutoIdException(
+                    f"Sequences table '{table_name}' not found. "
+                    f"Create it with partition key 'entity' (String).",
+                    strategy="numeric",
+                    entity=self._entity
+                )
+            raise
 
     def __validate_key_dict(self, key: dict):
         missing = [k for k in self._partition_keys if k not in key]

@@ -6,4 +6,5 @@ from .exceptions import (
     ValidationException,
     RecordNotFoundException,
     InvalidArgumentException,
+    AutoIdException,
 )
