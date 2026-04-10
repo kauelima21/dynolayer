@@ -177,10 +177,10 @@ user.save()
 ```python
 # Deletar instância
 user = User.find({"id": 1})
-user.delete()
+user.destroy()
 
-# Ou usar o método destroy
-User.destroy({"id": 1})
+# Ou deletar por chave
+User.delete({"id": 1})
 
 # Deletar em lote
 User.batch_destroy([{"id": 1}, {"id": 2}, {"id": 3}])

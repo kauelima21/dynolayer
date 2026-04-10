@@ -93,7 +93,7 @@ class DynoLayer(CrudMixin):
         return instance
 
     @classmethod
-    def destroy(cls, key: dict):
+    def delete(cls, key: dict):
         instance = cls()
         return instance._delete(key)
 
@@ -168,7 +168,7 @@ class DynoLayer(CrudMixin):
 
         return self._update(self.__safe(self._partition_keys), keys)
 
-    def delete(self):
+    def destroy(self):
         keys = {key: self.data()[key] for key in self._partition_keys}
         return self._delete(keys)
 

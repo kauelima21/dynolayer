@@ -136,10 +136,10 @@ user.save()
 ```python
 # Deletar instância
 user = User.find({"id": 1})
-user.delete()
+user.destroy()
 
 # Ou deletar por chave
-User.destroy({"id": 1})
+User.delete({"id": 1})
 
 # Deletar em lote
 User.batch_destroy([{"id": 1}, {"id": 2}, {"id": 3}])
@@ -378,7 +378,7 @@ count = User().get_count()
 | `find_or_fail(key, message)` | Buscar ou lançar exceção |
 | `where(*args)` | Iniciar query builder |
 | `create(data)` | Criar e salvar registro |
-| `destroy(key)` | Deletar registro por chave |
+| `delete(key)` | Deletar registro por chave |
 | `batch_create(items)` | Criar vários registros em lote |
 | `batch_find(keys)` | Buscar vários por chave primária |
 | `batch_destroy(keys)` | Deletar vários registros em lote |
@@ -407,7 +407,7 @@ count = User().get_count()
 | Método | Descrição |
 |--------|-----------|
 | `save()` | Criar ou atualizar registro |
-| `delete()` | Deletar registro atual |
+| `destroy()` | Deletar registro atual |
 | `data()` | Obter dicionário interno de dados |
 | `fillable()` | Obter lista de campos preenchíveis |
 | `last_evaluated_key()` | Token de paginação da última query |
