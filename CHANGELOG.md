@@ -4,6 +4,29 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-04-11
+
+### Added
+
+- **Modo silencioso (`raise_on_error`)**: Novo atributo de classe `raise_on_error = False` que suprime exceções em operações de leitura e escrita. Em vez de lançar exceções, os métodos retornam indicadores de falha (`None`, `False`, `Collection` vazia, `0`) e o erro fica acessível via `fail()`.
+- **Método `fail()`**: Acessível tanto na instância (`user.fail()`) quanto na classe (`User.fail()`). Retorna a última exceção capturada (`DynoLayerException` ou subclasse), ou `None` se não houver erro. É resetado automaticamente a cada nova operação.
+
+### Métodos afetados
+
+| Método | Retorno em caso de erro |
+|--------|------------------------|
+| `find()` | `None` |
+| `create()` | `None` |
+| `delete()` | `False` |
+| `find_or_fail()` | `None` |
+| `batch_create()` | `[]` |
+| `batch_find()` | `Collection([])` |
+| `batch_destroy()` | `False` |
+| `save()` | `False` |
+| `destroy()` | `False` |
+| `get()` | `Collection([])` |
+| `count()` | `0` |
+
 ## [1.0.0] - 2026-04-10
 
 ### Breaking Changes
