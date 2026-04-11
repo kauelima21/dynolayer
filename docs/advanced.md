@@ -739,6 +739,51 @@ for user in User.where("role", "admin").index("role-index").stream():
     send_notification(user)
 ```
 
+## Acesso a Campos via Dicionário
+
+O DynoLayer usa `__getattr__`/`__setattr__` para expor campos do DynamoDB como propriedades do objeto. Isso funciona na maioria dos casos, mas causa colisão quando o nome de um campo coincide com um método da classe.
+
+### O problema
+
+```python
+user = User.find({"id": 1})
+user.data       # → <bound method DynoLayer.data>  (método, não o campo!)
+user.data()     # → {"id": 1, "data": "valor real", ...}
+```
+
+O Python resolve métodos definidos na classe **antes** de chamar `__getattr__`, então campos com nomes como `data`, `save`, `get`, `count`, `index`, `limit`, `stream`, `offset`, entre outros, ficam inacessíveis via acesso direto por atributo.
+
+### A solução: sintaxe de dicionário
+
+Use `item["key"]` para acessar qualquer campo de forma segura:
+
+```python
+user = User.find({"id": 1})
+
+# Acesso seguro — nunca colide com métodos
+user["data"]           # → valor do campo "data"
+user["save"]           # → valor do campo "save"
+
+# Atribuição
+user["name"] = "Ana"   # Equivalente a user.name = "Ana"
+
+# Verificar existência
+if "email" in user:
+    print(user["email"])
+
+# Deletar campo
+del user["role"]
+```
+
+### Quando usar cada sintaxe
+
+| Sintaxe | Quando usar |
+|---------|-------------|
+| `user.name` | Campos com nomes que **não** colidem com métodos da classe |
+| `user["name"]` | Sempre seguro — especialmente quando o nome do campo é dinâmico ou pode colidir |
+
+Para código defensivo ou quando os nomes dos campos vêm de input externo, prefira sempre a sintaxe de dicionário.
+
 ## Boas Práticas
 
 ### Use índices nas suas queries

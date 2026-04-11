@@ -4,6 +4,17 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2026-04-11
+
+### Added
+
+- **Acesso via dicionário (`item["key"]`)**: Implementa `__getitem__`, `__setitem__`, `__contains__` e `__delitem__` na classe `DynoLayer`. Permite acessar campos do registro sem colisão com métodos internos como `data`, `save`, `get`, etc.
+
+### Changed
+
+- **Reordenação dos parâmetros do `__init__`**: Os parâmetros mais usados (`entity`, `required_fields`, `timestamps`, `partition_key`) agora vêm primeiro, seguidos dos menos comuns (`fillable`, `timestamp_format`, `auto_id`, `auto_id_length`, `auto_id_table`, `sort_key`).
+- **Tipagem nos parâmetros `timestamp_format` e `auto_id`**: Agora usam `Literal` para autocomplete e validação estática.
+
 ## [1.1.0] - 2026-04-11
 
 ### Added

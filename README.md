@@ -15,6 +15,7 @@ Uma biblioteca Python para DynamoDB que traz a elegância do Eloquent ORM (Larav
 - **Escrita Condicional**: `unique=True` no create e condições no save para escrita segura
 - **Transações**: Escrita e leitura transacional atômica via `transact_write`/`transact_get`
 - **Configuração Centralizada**: API de configuração para credenciais AWS, timestamps e retry
+- **Acesso via Dicionário**: `item["key"]` para acessar campos sem colisão com métodos internos
 - **Type Safety**: Conversão automática de tipos e resolução inteligente de key conditions
 
 ## Instalação
@@ -133,6 +134,28 @@ recent_admins = (
 user = User.find({"id": 1})
 user.name = "Jane Doe"
 user.save()
+```
+
+### Acesso via Dicionário
+
+Use a sintaxe `item["key"]` para acessar campos cujo nome colide com métodos da classe (como `data`, `get`, `save`, etc):
+
+```python
+user = User.find({"id": 1})
+
+# Acesso por atributo — funciona para campos sem colisão
+print(user.name)           # "John Doe"
+
+# Acesso por dicionário — seguro para qualquer campo
+print(user["name"])        # "John Doe"
+user["name"] = "Jane Doe"  # Equivalente a user.name = "Jane Doe"
+
+# Verificar se um campo existe
+if "email" in user:
+    print(user["email"])
+
+# Deletar um campo
+del user["role"]
 ```
 
 ### Deletar Registros
@@ -424,6 +447,16 @@ count = User().get_count()
 | `fillable()` | Obter lista de campos preenchíveis |
 | `last_evaluated_key()` | Token de paginação da última query |
 | `get_count()` | Contagem de itens retornados na última query |
+
+### Acesso a Campos
+
+| Sintaxe | Descrição |
+|---------|-----------|
+| `item.campo` | Acesso por atributo (pode colidir com métodos) |
+| `item["campo"]` | Acesso por dicionário (seguro, sem colisão) |
+| `item["campo"] = valor` | Atribuição por dicionário |
+| `"campo" in item` | Verifica se o campo existe |
+| `del item["campo"]` | Remove o campo |
 
 ### Métodos da Collection
 
