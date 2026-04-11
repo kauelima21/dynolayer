@@ -44,9 +44,10 @@ class DynoLayer(CrudMixin):
     raise_on_error = True
     _class_last_error = None
 
-    def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None,
-                 auto_id=None, auto_id_length=None, auto_id_table=None,
-                 partition_key: str = "", sort_key: str = None):
+    def __init__(self, entity="", required_fields=None, timestamps=True, partition_key: str = "",
+                 fillable=None, timestamp_format: Literal["numeric", "iso"] = None,
+                 auto_id: Literal["uuid4", "uuid1", "uuid7", "numeric"] = None,
+                 auto_id_length=None, auto_id_table=None, sort_key: str = None):
         if auto_id is not None:
             if auto_id not in self._VALID_AUTO_ID_STRATEGIES:
                 raise InvalidArgumentException(
@@ -124,6 +125,18 @@ class DynoLayer(CrudMixin):
             super().__setattr__(key, value)
         else:
             self._data[key] = value
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __setitem__(self, key, value):
+        self._data[key] = value
+
+    def __contains__(self, key):
+        return key in self._data
+
+    def __delitem__(self, key):
+        del self._data[key]
 
     @classmethod
     def configure(cls, **kwargs) -> None:

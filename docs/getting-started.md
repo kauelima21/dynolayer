@@ -205,7 +205,13 @@ user = User.find({"id": 1}, attributes=["name", "email"])
 user = User.find({"id": 1})
 user.name = "Jane Doe"
 user.save()
+
+# Também funciona com sintaxe de dicionário
+user["name"] = "Jane Doe"
+user.save()
 ```
+
+> **Dica**: Use `user["campo"]` quando o nome do campo pode colidir com métodos da classe (como `data`, `get`, `save`). Veja [Acesso a Campos via Dicionário](advanced.md#acesso-a-campos-via-dicionário) para mais detalhes.
 
 ### Deletar um registro
 
