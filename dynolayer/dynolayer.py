@@ -11,7 +11,7 @@ from boto3.dynamodb.conditions import Attr
 from dynolayer.config import DynoConfig
 from dynolayer.crud_mixin import CrudMixin
 from dynolayer.exceptions import (
-    QueryException, ValidationException, RecordNotFoundException,
+    DynoLayerException, QueryException, ValidationException, RecordNotFoundException,
     InvalidArgumentException, AutoIdException, )
 from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
 
@@ -27,8 +27,22 @@ class _HybridWhere:
         return obj.and_where
 
 
+class _HybridFail:
+    def __get__(self, obj, cls):
+        if obj is None:
+            def class_fail():
+                return cls._class_last_error
+            return class_fail
+
+        def instance_fail():
+            return obj._last_error
+        return instance_fail
+
+
 class DynoLayer(CrudMixin):
     _VALID_AUTO_ID_STRATEGIES = ("uuid4", "uuid1", "uuid7", "numeric")
+    raise_on_error = True
+    _class_last_error = None
 
     def __init__(self, entity="", required_fields=None, fillable=None, timestamps=True, timestamp_format=None,
                  auto_id=None, auto_id_length=None, auto_id_table=None,
@@ -83,6 +97,9 @@ class DynoLayer(CrudMixin):
 
         self._data = {}
 
+        # Error tracking for silent mode
+        self._last_error = None
+
         # Pagination metadata
         self._last_evaluated_key = None
         self._get_count = 0
@@ -121,122 +138,165 @@ class DynoLayer(CrudMixin):
 
     @classmethod
     def find(cls, key: dict, attributes: List[str] = None) -> Optional[DynoLayer]:
-        instance = cls()
-        instance.__validate_key_dict(key)
+        cls._class_last_error = None
+        try:
+            instance = cls()
+            instance.__validate_key_dict(key)
 
-        kwargs = {"TableName": instance._entity, "Key": key}
-        if attributes:
-            attr_names = {f"#proj_{i}": attr for i, attr in enumerate(attributes)}
-            kwargs["ProjectionExpression"] = ", ".join(attr_names.keys())
-            kwargs["ExpressionAttributeNames"] = attr_names
+            kwargs = {"TableName": instance._entity, "Key": key}
+            if attributes:
+                attr_names = {f"#proj_{i}": attr for i, attr in enumerate(attributes)}
+                kwargs["ProjectionExpression"] = ", ".join(attr_names.keys())
+                kwargs["ExpressionAttributeNames"] = attr_names
 
-        response = instance._table.get_item(**kwargs)
+            response = instance._table.get_item(**kwargs)
 
-        if not response.get("Item"):
+            if not response.get("Item"):
+                return None
+
+            for key, value in response["Item"].items():
+                instance._data[key] = value
+
+            return instance
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
             return None
 
-        for key, value in response["Item"].items():
-            instance._data[key] = value
-
-        return instance
-
     where = _HybridWhere()
+    fail = _HybridFail()
 
     @classmethod
     def delete(cls, key: dict) -> bool:
-        instance = cls()
-        instance.__validate_key_dict(key)
-        return instance._delete(key)
+        cls._class_last_error = None
+        try:
+            instance = cls()
+            instance.__validate_key_dict(key)
+            return instance._delete(key)
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
+            return False
 
     @classmethod
-    def create(cls, data: Dict, unique=False) -> DynoLayer:
-        instance = cls()
-
-        for key, value in data.items():
-            if key in instance.fillable():
-                instance._data[key] = value
-
-        instance.__apply_auto_id()
-        instance.__validate_required_fields()
-
-        if instance._timestamps:
-            instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
-            instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
-
-        condition = Attr(instance._hash_key).not_exists() if unique else None
-        instance._put(instance.__safe(), condition=condition)
-
-        return instance
-
-    @classmethod
-    def batch_create(cls, items: List[Dict]) -> List[DynoLayer]:
-        ref_instance = cls()
-        instances = []
-
-        # Pre-generate numeric IDs in a single atomic call
-        numeric_ids = None
-        if ref_instance._auto_id == "numeric":
-            items_needing_id = []
-            pk_field = ref_instance._partition_keys[0]
-            for data in items:
-                if pk_field not in data or data.get(pk_field) is None:
-                    items_needing_id.append(True)
-                else:
-                    items_needing_id.append(False)
-            count = sum(items_needing_id)
-            if count > 0:
-                numeric_ids = ref_instance.__generate_numeric_id_batch(count)
-
-        numeric_id_index = 0
-        for data in items:
+    def create(cls, data: Dict, unique=False) -> Optional[DynoLayer]:
+        cls._class_last_error = None
+        try:
             instance = cls()
 
             for key, value in data.items():
                 if key in instance.fillable():
                     instance._data[key] = value
 
-            if numeric_ids is not None:
-                pk_field = instance._partition_keys[0]
-                if pk_field not in instance._data or instance._data.get(pk_field) is None:
-                    instance._data[pk_field] = numeric_ids[numeric_id_index]
-                    numeric_id_index += 1
-            else:
-                instance.__apply_auto_id()
-
+            instance.__apply_auto_id()
             instance.__validate_required_fields()
 
             if instance._timestamps:
                 instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
                 instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
 
-            instances.append(instance)
+            condition = Attr(instance._hash_key).not_exists() if unique else None
+            instance._put(instance.__safe(), condition=condition)
 
-        safe_items = [inst.__safe() for inst in instances]
-        cls()._batch_put(safe_items)
+            return instance
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
+            return None
 
-        return instances
+    @classmethod
+    def batch_create(cls, items: List[Dict]) -> List[DynoLayer]:
+        cls._class_last_error = None
+        try:
+            ref_instance = cls()
+            instances = []
+
+            # Pre-generate numeric IDs in a single atomic call
+            numeric_ids = None
+            if ref_instance._auto_id == "numeric":
+                items_needing_id = []
+                pk_field = ref_instance._partition_keys[0]
+                for data in items:
+                    if pk_field not in data or data.get(pk_field) is None:
+                        items_needing_id.append(True)
+                    else:
+                        items_needing_id.append(False)
+                count = sum(items_needing_id)
+                if count > 0:
+                    numeric_ids = ref_instance.__generate_numeric_id_batch(count)
+
+            numeric_id_index = 0
+            for data in items:
+                instance = cls()
+
+                for key, value in data.items():
+                    if key in instance.fillable():
+                        instance._data[key] = value
+
+                if numeric_ids is not None:
+                    pk_field = instance._partition_keys[0]
+                    if pk_field not in instance._data or instance._data.get(pk_field) is None:
+                        instance._data[pk_field] = numeric_ids[numeric_id_index]
+                        numeric_id_index += 1
+                else:
+                    instance.__apply_auto_id()
+
+                instance.__validate_required_fields()
+
+                if instance._timestamps:
+                    instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
+                    instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
+
+                instances.append(instance)
+
+            safe_items = [inst.__safe() for inst in instances]
+            cls()._batch_put(safe_items)
+
+            return instances
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
+            return []
 
     @classmethod
     def batch_find(cls, keys: List[Dict]) -> Collection:
-        instance = cls()
-        for key in keys:
-            instance.__validate_key_dict(key)
-        raw_items = instance._batch_get(keys)
+        cls._class_last_error = None
+        try:
+            instance = cls()
+            for key in keys:
+                instance.__validate_key_dict(key)
+            raw_items = instance._batch_get(keys)
 
-        items = []
-        for row in raw_items:
-            model_instance = cls()
-            model_instance._data = row.copy()
-            items.append(model_instance)
+            items = []
+            for row in raw_items:
+                model_instance = cls()
+                model_instance._data = row.copy()
+                items.append(model_instance)
 
-        return Collection(items)
+            return Collection(items)
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
+            return Collection([])
 
     @classmethod
     def batch_destroy(cls, keys: List[Dict]) -> bool:
-        instance = cls()
-        for key in keys:
-            instance.__validate_key_dict(key)
-        return instance._batch_delete(keys)
+        cls._class_last_error = None
+        try:
+            instance = cls()
+            for key in keys:
+                instance.__validate_key_dict(key)
+            return instance._batch_delete(keys)
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
+            return False
 
     @classmethod
     def prepare_put(cls, data: Dict) -> Dict:
@@ -350,20 +410,34 @@ class DynoLayer(CrudMixin):
         return items
 
     def save(self, condition=None) -> bool:
-        self.__apply_auto_id()
-        self.__validate_required_fields(self._partition_keys)
-        keys = {key: self.data()[key] for key in self._partition_keys}
+        self._last_error = None
+        try:
+            self.__apply_auto_id()
+            self.__validate_required_fields(self._partition_keys)
+            keys = {key: self.data()[key] for key in self._partition_keys}
 
-        if self._timestamps:
-            self._data["created_at"] = self._data["created_at"] if self._data.get(
-                "created_at") else self._get_current_timestamp(self._timestamp_format)
-            self._data["updated_at"] = self._get_current_timestamp(self._timestamp_format)
+            if self._timestamps:
+                self._data["created_at"] = self._data["created_at"] if self._data.get(
+                    "created_at") else self._get_current_timestamp(self._timestamp_format)
+                self._data["updated_at"] = self._get_current_timestamp(self._timestamp_format)
 
-        return self._update(self.__safe(self._partition_keys), keys, condition=condition)
+            return self._update(self.__safe(self._partition_keys), keys, condition=condition)
+        except DynoLayerException as e:
+            if self.raise_on_error:
+                raise
+            self._last_error = e
+            return False
 
     def destroy(self) -> bool:
-        keys = {key: self.data()[key] for key in self._partition_keys}
-        return self._delete(keys)
+        self._last_error = None
+        try:
+            keys = {key: self.data()[key] for key in self._partition_keys}
+            return self._delete(keys)
+        except DynoLayerException as e:
+            if self.raise_on_error:
+                raise
+            self._last_error = e
+            return False
 
     def and_where(self, *args) -> DynoLayer:
         attribute, condition, value = extract_params(*args)
@@ -425,49 +499,57 @@ class DynoLayer(CrudMixin):
         return self
 
     def get(self, return_all=False) -> Collection:
-        if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
-            raise QueryException(
-                "You must specify a filter condition before executing this operation.",
-                operation="get",
-                suggestions=[
-                    "Use .where() to add a filter condition",
-                    "Use .all() to query all records"
-                ]
-            )
+        self._last_error = None
+        try:
+            if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
+                raise QueryException(
+                    "You must specify a filter condition before executing this operation.",
+                    operation="get",
+                    suggestions=[
+                        "Use .where() to add a filter condition",
+                        "Use .all() to query all records"
+                    ]
+                )
 
-        self.__resolve_key_conditions()
-        self.__validate_index()
+            self.__resolve_key_conditions()
+            self.__validate_index()
 
-        filter_expression = None
-        if self._filter_expression:
-            filter_expression = transform_params_in_filter(self._filter_expression)
+            filter_expression = None
+            if self._filter_expression:
+                filter_expression = transform_params_in_filter(self._filter_expression)
 
-        items = []
-        if self._key_condition_expression and not self._force_scan and not self._scan_all:
-            key_condition = transform_params_in_query(self._key_condition_expression)
-            response = self._query(key_condition, filter_expression, self._index, self._limit, return_all, self._project_expression, self._offset)
-            for row in response["Items"]:
-                model_instance = self.__class__()
-                model_instance._data = row.copy()
-                items.append(model_instance)
-        else:
-            response = self._scan(filter_expression, self._limit, return_all, self._project_expression, self._offset)
-            for row in response["Items"]:
-                model_instance = self.__class__()
-                model_instance._data = row.copy()
-                items.append(model_instance)
+            items = []
+            if self._key_condition_expression and not self._force_scan and not self._scan_all:
+                key_condition = transform_params_in_query(self._key_condition_expression)
+                response = self._query(key_condition, filter_expression, self._index, self._limit, return_all, self._project_expression, self._offset)
+                for row in response["Items"]:
+                    model_instance = self.__class__()
+                    model_instance._data = row.copy()
+                    items.append(model_instance)
+            else:
+                response = self._scan(filter_expression, self._limit, return_all, self._project_expression, self._offset)
+                for row in response["Items"]:
+                    model_instance = self.__class__()
+                    model_instance._data = row.copy()
+                    items.append(model_instance)
 
-        # Store pagination metadata BEFORE reset
-        last_key = response.get("LastEvaluatedKey")
-        count = response.get("Count", len(items))
+            # Store pagination metadata BEFORE reset
+            last_key = response.get("LastEvaluatedKey")
+            count = response.get("Count", len(items))
 
-        self.__reset_query_builder()
+            self.__reset_query_builder()
 
-        # Set pagination metadata AFTER reset
-        self._last_evaluated_key = last_key
-        self._get_count = count
+            # Set pagination metadata AFTER reset
+            self._last_evaluated_key = last_key
+            self._get_count = count
 
-        return Collection(items)
+            return Collection(items)
+        except DynoLayerException as e:
+            if self.raise_on_error:
+                raise
+            self._last_error = e
+            self.__reset_query_builder()
+            return Collection([])
 
     def fetch(self, return_all=False) -> Collection:
         return self.get(return_all)
@@ -513,38 +595,53 @@ class DynoLayer(CrudMixin):
             kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
     def count(self) -> int:
-        if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
-            raise QueryException(
-                "You must specify a filter condition before executing this operation.",
-                operation="count",
-                suggestions=[
-                    "Use .where() to add a filter condition",
-                    "Use .all() to count all records"
-                ]
-            )
+        self._last_error = None
+        try:
+            if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
+                raise QueryException(
+                    "You must specify a filter condition before executing this operation.",
+                    operation="count",
+                    suggestions=[
+                        "Use .where() to add a filter condition",
+                        "Use .all() to count all records"
+                    ]
+                )
 
-        self.__resolve_key_conditions()
-        self.__validate_index()
+            self.__resolve_key_conditions()
+            self.__validate_index()
 
-        filter_expression = None
-        if self._filter_expression:
-            filter_expression = transform_params_in_filter(self._filter_expression)
+            filter_expression = None
+            if self._filter_expression:
+                filter_expression = transform_params_in_filter(self._filter_expression)
 
-        if self._key_condition_expression and not self._force_scan and not self._scan_all:
-            key_condition = transform_params_in_query(self._key_condition_expression)
-            total = self._count_query(key_condition, filter_expression, self._index)
-        else:
-            total = self._count_scan(filter_expression)
+            if self._key_condition_expression and not self._force_scan and not self._scan_all:
+                key_condition = transform_params_in_query(self._key_condition_expression)
+                total = self._count_query(key_condition, filter_expression, self._index)
+            else:
+                total = self._count_scan(filter_expression)
 
-        self.__reset_query_builder()
-        return total
+            self.__reset_query_builder()
+            return total
+        except DynoLayerException as e:
+            if self.raise_on_error:
+                raise
+            self._last_error = e
+            self.__reset_query_builder()
+            return 0
 
     @classmethod
-    def find_or_fail(cls, key: dict, message="Record not found.", attributes: List[str] = None) -> DynoLayer:
-        instance = cls.find(key, attributes=attributes)
-        if instance is None:
-            raise RecordNotFoundException(message, key=key, entity=cls.__name__)
-        return instance
+    def find_or_fail(cls, key: dict, message="Record not found.", attributes: List[str] = None) -> Optional[DynoLayer]:
+        cls._class_last_error = None
+        try:
+            instance = cls.find(key, attributes=attributes)
+            if instance is None and cls._class_last_error is None:
+                raise RecordNotFoundException(message, key=key, entity=cls.__name__)
+            return instance
+        except DynoLayerException as e:
+            if cls.raise_on_error:
+                raise
+            cls._class_last_error = e
+            return None
 
     def _load_indexes(self):
         from dynolayer.crud_mixin import CrudMixin

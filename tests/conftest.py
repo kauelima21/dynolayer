@@ -30,6 +30,23 @@ def get_user():
     return User
 
 
+@pytest.fixture
+def get_silent_user():
+    class SilentUser(DynoLayer):
+        raise_on_error = False
+
+        def __init__(self) -> None:
+            super().__init__(
+                entity="users",
+                required_fields=["first_name", "email", "role"],
+                fillable=["id", "first_name", "last_name", "email", "role", "stars", "stats", "phones"],
+                timestamps=True,
+                partition_key="id",
+            )
+
+    return SilentUser
+
+
 @pytest.fixture()
 def faker():
     yield Faker(['en_US', 'pt_BR'])
