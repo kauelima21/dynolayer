@@ -44,7 +44,7 @@ class DynoLayer(CrudMixin):
     raise_on_error = True
     _class_last_error = None
 
-    def __init__(self, entity="", required_fields=None, timestamps=True, partition_key: str = "",
+    def __init__(self, entity="", required_fields=None, partition_key: str = "id", timestamps=True,
                  fillable=None, timestamp_format: Literal["numeric", "iso"] = None,
                  auto_id: Literal["uuid4", "uuid1", "uuid7", "numeric"] = None,
                  auto_id_length=None, auto_id_table=None, sort_key: str = None):

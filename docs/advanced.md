@@ -687,17 +687,18 @@ product = Product.create({
 
 ## Otimização para Lambda
 
-O parâmetro `partition_key` (e `sort_key` quando aplicável) é obrigatório na declaração do model. Isso permite que o DynoLayer funcione sem chamar `describe_table` no init, eliminando uma API call extra que adicionaria latência no cold start em AWS Lambda.
+O parâmetro `partition_key` (padrão: `"id"`) e `sort_key` (quando aplicável) permitem que o DynoLayer funcione sem chamar `describe_table` no init, eliminando uma API call extra que adicionaria latência no cold start em AWS Lambda. Se a partition key da sua tabela é `"id"`, não é necessário declarar o parâmetro.
 
 ```python
+# partition_key="id" é o padrão — não precisa declarar
 class User(DynoLayer):
     def __init__(self):
         super().__init__(
             entity="users",
             fillable=["id", "email", "name"],
-            partition_key="id",
         )
 
+# Para tabelas com partition key diferente, declare explicitamente
 class Event(DynoLayer):
     def __init__(self):
         super().__init__(
