@@ -4,6 +4,21 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.1] - 2026-04-12
+
+### Changed
+
+- **`partition_key` agora tem default `"id"`**: Não é mais necessário declarar `partition_key="id"` nos models cuja partition key é `"id"` (o caso mais comum). Models com partition key diferente continuam declarando explicitamente (ex: `partition_key="user_id"`).
+- **Reordenação dos parâmetros do `__init__`**: `partition_key` agora vem antes de `timestamps` na assinatura.
+
+### Fixed
+
+- **Documentação**: Atualizada para refletir que `partition_key` não é mais obrigatório quando a partition key é `"id"`.
+
+### Removed
+
+- **`docs/spec-find-v1.3.0.md`**: Spec removida após implementação completa na v1.3.0.
+
 ## [1.3.0] - 2026-04-12
 
 ### Breaking Changes
@@ -65,7 +80,7 @@ users = User().find("role = :r", r="admin").index("role-index").fetch(True)
 
 ### Breaking Changes
 
-- **`partition_key` agora é obrigatório** na declaração do model. Elimina a chamada `describe_table` ao DynamoDB no init, removendo latência no cold start em Lambda.
+- **`partition_key` declarado no model** (default `"id"` desde v1.3.1). Elimina a chamada `describe_table` ao DynamoDB no init, removendo latência no cold start em Lambda.
 - **`delete()` e `destroy()` tiveram os papéis trocados.** `delete(key)` agora é classmethod (deleta por chave), `destroy()` agora é método de instância (deleta o registro atual).
 
 ### Added
