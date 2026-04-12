@@ -8,10 +8,10 @@ from dynolayer.exceptions import (
 class TestSilentModeClassMethods:
     def test_find_with_invalid_key_raises_by_default(self, get_user, create_table, aws_mock):
         with pytest.raises(ValidationException):
-            get_user.find({})
+            get_user.get_item({})
 
     def test_find_with_invalid_key_silent(self, get_silent_user, create_table, aws_mock):
-        result = get_silent_user.find({})
+        result = get_silent_user.get_item({})
         assert result is None
         error = get_silent_user.fail()
         assert isinstance(error, ValidationException)
@@ -100,11 +100,11 @@ class TestSilentModeInstanceMethods:
 class TestSilentModeErrorReset:
     def test_fail_resets_on_successful_operation(self, get_silent_user, create_table, aws_mock):
         # First: trigger an error
-        get_silent_user.find({})
+        get_silent_user.get_item({})
         assert get_silent_user.fail() is not None
 
         # Second: successful operation resets the error
-        get_silent_user.find({"id": 1})
+        get_silent_user.get_item({"id": 1})
         assert get_silent_user.fail() is None
 
     def test_instance_fail_resets_on_successful_operation(self, get_silent_user, create_table, aws_mock):
@@ -145,7 +145,7 @@ class TestSilentModeSuccessfulOperations:
         assert user.fail() is None
 
     def test_find_returns_none_for_missing_record_no_error(self, get_silent_user, create_table, aws_mock):
-        result = get_silent_user.find({"id": 999})
+        result = get_silent_user.get_item({"id": 999})
         assert result is None
         assert get_silent_user.fail() is None
 

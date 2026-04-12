@@ -2,6 +2,83 @@
 
 DynoLayer provides a fluent, chainable query builder similar to Laravel's Eloquent. Build complex queries with an intuitive API.
 
+## Expression Queries (find)
+
+O método `find()` oferece uma API expressiva para construir queries e scans com expression strings:
+
+### Sintaxe básica
+
+```python
+# Scan geral (todos os registros)
+users = User().find().fetch(True)
+
+# Query por partition key
+users = User().find("role = :r", r="admin").index("role-index").fetch(True)
+
+# Múltiplas condições
+users = User().find(
+    "role = :r AND status = :s",
+    r="admin", s="active"
+).index("role-index").fetch(True)
+```
+
+### Operadores suportados
+
+| Operador | Sintaxe | Exemplo |
+|----------|---------|---------|
+| Igual | `attr = :val` | `"user_id = :uid"` |
+| Diferente | `attr <> :val` | `"status <> :s"` |
+| Menor que | `attr < :val` | `"age < :max"` |
+| Menor ou igual | `attr <= :val` | `"age <= :max"` |
+| Maior que | `attr > :val` | `"age > :min"` |
+| Maior ou igual | `attr >= :val` | `"age >= :min"` |
+| Começa com | `attr begins_with :val` | `"name begins_with :prefix"` |
+| Contém | `attr contains :val` | `"tags contains :tag"` |
+| Está em | `attr in :val` | `"status in :list"` (valor deve ser lista) |
+| Entre | `attr between :start and :end` | `"age between :min and :max"` |
+| Existe | `attr exists` | `"email exists"` (sem placeholder) |
+| Não existe | `attr not_exists` | `"phone not_exists"` (sem placeholder) |
+| Tipo do atributo | `attr attribute_type :val` | `"data attribute_type :t"` |
+
+### Conectores lógicos
+
+| Conector | Exemplo |
+|----------|---------|
+| `AND` | `"user_id = :uid AND status = :s"` |
+| `OR` | `"city = :c1 OR city = :c2"` |
+| `AND NOT` | `"user_id = :uid AND NOT status = :s"` |
+| `OR NOT` | `"user_id = :uid OR NOT archived = :a"` |
+
+### Exemplos completos
+
+```python
+# Between
+orders = Order().find(
+    "created_at between :start and :end",
+    start="2024-01-01", end="2024-12-31"
+).fetch(True)
+
+# Exists / Not exists (sem placeholder)
+users = User().find("email exists").fetch(True)
+users = User().find("phone not_exists").fetch(True)
+
+# Combinação complexa
+addresses = Address().find(
+    "user_id = :uid AND email exists AND NOT status = :s",
+    uid="123", s="deleted"
+).index("user-index").limit(50).fetch(True)
+
+# Com paginação
+page1 = User().find("role = :r", r="admin").index("role-index").limit(10).fetch()
+last_key = User().last_evaluated_key
+
+page2 = User().find("role = :r", r="admin").index("role-index").limit(10).offset(last_key).fetch()
+```
+
+## Where Query Builder
+
+O query builder com `where()` continua disponível para quem prefere a API encadeada:
+
 ## Basic Queries
 
 ### Simple where clause
@@ -232,6 +309,7 @@ print(f"Found {active_admins.count()} active admins")
 
 | Method | Description |
 |--------|-------------|
+| `find(expression, **values)` | Unified query/scan with expression string |
 | `where(attr, operator, value)` | Add WHERE condition |
 | `and_where(attr, operator, value)` | Add AND condition |
 | `or_where(attr, operator, value)` | Add OR condition |

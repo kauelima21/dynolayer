@@ -3,12 +3,12 @@ from dynolayer.exceptions import ValidationException, QueryException
 
 
 class TestPrimaryKeyValidation:
-    def test_find_with_missing_key_raises(self, get_user, create_table, aws_mock):
+    def test_get_item_with_missing_key_raises(self, get_user, create_table, aws_mock):
         with pytest.raises(ValidationException, match="Missing primary key"):
-            get_user.find({})
+            get_user.get_item({})
 
-    def test_find_with_valid_key_passes(self, get_user, create_table, aws_mock, save_records):
-        user = get_user.find({"id": 1})
+    def test_get_item_with_valid_key_passes(self, get_user, create_table, aws_mock, save_records):
+        user = get_user.get_item({"id": 1})
         assert user is not None
 
     def test_delete_with_missing_key_raises(self, get_user, create_table, aws_mock):
