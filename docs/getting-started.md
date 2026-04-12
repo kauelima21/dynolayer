@@ -187,7 +187,7 @@ users = User.batch_create([
 users = User.all().get()
 
 # Buscar por chave primária
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 
 # Buscar ou lançar exceção
 user = User.find_or_fail({"id": 1}, "Usuário não encontrado")
@@ -196,13 +196,23 @@ user = User.find_or_fail({"id": 1}, "Usuário não encontrado")
 users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
 
 # Buscar apenas campos específicos (projeção)
-user = User.find({"id": 1}, attributes=["name", "email"])
+user = User.get_item({"id": 1}, attributes=["name", "email"])
+
+# Query com expression string
+admins = (
+    User().find("role = :r", r="admin")
+    .index("role-index")
+    .fetch(True)
+)
+
+# Scan geral com find
+all_users = User().find().fetch(True)
 ```
 
 ### Atualizar um registro
 
 ```python
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 user.name = "Jane Doe"
 user.save()
 
@@ -217,7 +227,7 @@ user.save()
 
 ```python
 # Deletar instância
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 user.destroy()
 
 # Ou deletar por chave

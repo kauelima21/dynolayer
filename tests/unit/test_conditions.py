@@ -30,7 +30,7 @@ class TestConditionalSave:
     def test_save_with_condition_succeeds(self, get_user, create_table, aws_mock):
         get_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
 
-        user = get_user.find({"id": 1})
+        user = get_user.get_item({"id": 1})
         user.first_name = "Jane"
         result = user.save(condition=Attr("role").eq("admin"))
         assert result is True
@@ -38,7 +38,7 @@ class TestConditionalSave:
     def test_save_with_condition_fails(self, get_user, create_table, aws_mock):
         get_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
 
-        user = get_user.find({"id": 1})
+        user = get_user.get_item({"id": 1})
         user.first_name = "Jane"
         with pytest.raises(ConditionalCheckException):
             user.save(condition=Attr("role").eq("moderator"))

@@ -13,7 +13,7 @@ from dynolayer.crud_mixin import CrudMixin
 from dynolayer.exceptions import (
     DynoLayerException, QueryException, ValidationException, RecordNotFoundException,
     InvalidArgumentException, AutoIdException, )
-from dynolayer.utils import extract_params, transform_params_in_query, transform_params_in_filter, Collection
+from dynolayer.utils import extract_params, parse_expression, transform_params_in_query, transform_params_in_filter, Collection
 
 
 class _HybridWhere:
@@ -150,7 +150,7 @@ class DynoLayer(CrudMixin):
         return instance
 
     @classmethod
-    def find(cls, key: dict, attributes: List[str] = None) -> Optional[DynoLayer]:
+    def get_item(cls, key: dict, attributes: List[str] = None) -> Optional[DynoLayer]:
         cls._class_last_error = None
         try:
             instance = cls()
@@ -176,6 +176,17 @@ class DynoLayer(CrudMixin):
                 raise
             cls._class_last_error = e
             return None
+
+    def find(self, expression: str = None, /, **values) -> DynoLayer:
+        if expression is None:
+            self._scan_all = True
+            return self
+
+        parsed = parse_expression(expression, **values)
+        for connector, attribute, condition, value in parsed:
+            self.__set_filter_expression(attribute, condition, value, connector)
+
+        return self
 
     where = _HybridWhere()
     fail = _HybridFail()
@@ -646,7 +657,7 @@ class DynoLayer(CrudMixin):
     def find_or_fail(cls, key: dict, message="Record not found.", attributes: List[str] = None) -> Optional[DynoLayer]:
         cls._class_last_error = None
         try:
-            instance = cls.find(key, attributes=attributes)
+            instance = cls.get_item(key, attributes=attributes)
             if instance is None and cls._class_last_error is None:
                 raise RecordNotFoundException(message, key=key, entity=cls.__name__)
             return instance

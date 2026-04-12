@@ -6,6 +6,7 @@ Uma biblioteca Python para DynamoDB que traz a elegância do Eloquent ORM (Larav
 
 - **Active Record Pattern**: Defina models que representam tabelas DynamoDB
 - **Fluent Query Builder**: Encadeie métodos para construir queries complexas
+- **Expression Queries**: API expressiva com `find("attr = :val", val=x)` para queries e scans unificados
 - **Collections**: Trabalhe com resultados usando métodos similares ao Eloquent
 - **Timestamps Automáticos**: Gerenciamento opcional de `created_at` e `updated_at` (numérico ou ISO 8601)
 - **Proteção de Mass Assignment**: Whitelist de campos para prevenir dados indesejados
@@ -105,25 +106,34 @@ users = User.batch_create([
 users = User.all().get()
 
 # Buscar por chave primária
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 
 # Buscar vários por chave primária (batch)
 users = User.batch_find([{"id": 1}, {"id": 2}, {"id": 3}])
 
-# Query com condições
+# Query com expression string (recomendado)
+admins = (
+    User().find("role = :r AND status = :s", r="admin", s="active")
+    .index("role-index")
+    .fetch(True)
+)
+
+# Queries complexas com expression
+recent_admins = (
+    User().find(
+        "role = :r AND created_at between :start and :end AND NOT email contains :e",
+        r="admin", start=yesterday, end=today, e="test"
+    )
+    .index("role-index")
+    .limit(100)
+    .fetch(True)
+)
+
+# Query com where (também suportado)
 admins = (
     User.where("role", "admin")
     .and_where("status", "active")
     .index("role-index")
-    .get()
-)
-
-# Queries complexas
-recent_admins = (
-    User.where("role", "admin")
-    .where_between("created_at", yesterday, today)
-    .where_not("email", "contains", "test")
-    .limit(100)
     .get()
 )
 ```
@@ -131,7 +141,7 @@ recent_admins = (
 ### Atualizar Registros
 
 ```python
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 user.name = "Jane Doe"
 user.save()
 ```
@@ -141,7 +151,7 @@ user.save()
 Use a sintaxe `item["key"]` para acessar campos cujo nome colide com métodos da classe (como `data`, `get`, `save`, etc):
 
 ```python
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 
 # Acesso por atributo — funciona para campos sem colisão
 print(user.name)           # "John Doe"
@@ -162,7 +172,7 @@ del user["role"]
 
 ```python
 # Deletar instância
-user = User.find({"id": 1})
+user = User.get_item({"id": 1})
 user.destroy()
 
 # Ou deletar por chave
@@ -403,8 +413,8 @@ count = User().get_count()
 | Método | Descrição |
 |--------|-----------|
 | `all()` | Iniciar query para todos os registros |
-| `find(key)` | Buscar registro por chave primária |
-| `find_or_fail(key, message)` | Buscar ou lançar exceção |
+| `get_item(key)` | Buscar registro por chave primária |
+| `find_or_fail(key, message)` | Buscar ou lançar exceção (usa `get_item` internamente) |
 | `where(*args)` | Iniciar query builder |
 | `create(data, unique)` | Criar e salvar registro (`unique=True` previne sobrescrita) |
 | `delete(key)` | Deletar registro por chave |
@@ -421,6 +431,7 @@ count = User().get_count()
 
 | Método | Descrição |
 |--------|-----------|
+| `find(expression, **values)` | Query/scan unificado com expression string |
 | `where(attr, operator, value)` | Adicionar condição WHERE |
 | `and_where(attr, operator, value)` | Adicionar condição AND |
 | `or_where(attr, operator, value)` | Adicionar condição OR |

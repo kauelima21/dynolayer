@@ -58,29 +58,29 @@ class TestDeclaredPartitionKey:
 
     def test_find_without_describe_table(self, get_fast_user, create_table, aws_mock):
         get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
-        user = get_fast_user.find({"id": 1})
+        user = get_fast_user.get_item({"id": 1})
         assert user.first_name == "John"
 
     def test_save_without_describe_table(self, get_fast_user, create_table, aws_mock):
         get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
-        user = get_fast_user.find({"id": 1})
+        user = get_fast_user.get_item({"id": 1})
         user.first_name = "Jane"
         user.save()
-        assert get_fast_user.find({"id": 1}).first_name == "Jane"
+        assert get_fast_user.get_item({"id": 1}).first_name == "Jane"
 
     def test_delete_without_describe_table(self, get_fast_user, create_table, aws_mock):
         get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
         get_fast_user.delete({"id": 1})
-        assert get_fast_user.find({"id": 1}) is None
+        assert get_fast_user.get_item({"id": 1}) is None
 
     def test_destroy_without_describe_table(self, get_fast_user, create_table, aws_mock):
         user = get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
         user.destroy()
-        assert get_fast_user.find({"id": 1}) is None
+        assert get_fast_user.get_item({"id": 1}) is None
 
     def test_validate_key_dict(self, get_fast_user, create_table, aws_mock):
         with pytest.raises(ValidationException, match="Missing primary key"):
-            get_fast_user.find({})
+            get_fast_user.get_item({})
 
     def test_index_query_lazy_loads_indexes(self, get_fast_user, create_table, aws_mock):
         get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
@@ -102,19 +102,19 @@ class TestDeclaredCompositeKey:
 
     def test_find_with_composite_key(self, get_event, create_table_with_sort_key, aws_mock):
         get_event.create({"user_id": "u1", "timestamp": 1000, "type": "login", "payload": "ok"})
-        event = get_event.find({"user_id": "u1", "timestamp": 1000})
+        event = get_event.get_item({"user_id": "u1", "timestamp": 1000})
         assert event.type == "login"
 
     def test_find_missing_sort_key_raises(self, get_event, create_table_with_sort_key, aws_mock):
         with pytest.raises(ValidationException, match="Missing primary key"):
-            get_event.find({"user_id": "u1"})
+            get_event.get_item({"user_id": "u1"})
 
     def test_save_with_composite_key(self, get_event, create_table_with_sort_key, aws_mock):
         get_event.create({"user_id": "u1", "timestamp": 1000, "type": "login", "payload": "ok"})
-        event = get_event.find({"user_id": "u1", "timestamp": 1000})
+        event = get_event.get_item({"user_id": "u1", "timestamp": 1000})
         event.payload = "updated"
         event.save()
-        assert get_event.find({"user_id": "u1", "timestamp": 1000}).payload == "updated"
+        assert get_event.get_item({"user_id": "u1", "timestamp": 1000}).payload == "updated"
 
 
 if __name__ == "__main__":

@@ -4,6 +4,29 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] - 2026-04-12
+
+### Breaking Changes
+
+- **`find(dict)` renomeado para `get_item(dict)`**: O classmethod `find` que buscava um item por chave primária foi renomeado para `get_item`. O método `find_or_fail` continua funcionando normalmente (chama `get_item` internamente).
+
+### Added
+
+- **Método `find(expression, **values)`**: Novo método de instância que unifica query e scan com uma API expressiva baseada em expression strings. Suporta todos os operadores de condição (`=`, `<>`, `<`, `<=`, `>`, `>=`, `begins_with`, `contains`, `in`, `between`, `exists`, `not_exists`, `attribute_type`) e conectores lógicos (`AND`, `OR`, `AND NOT`, `OR NOT`).
+- **`parse_expression()` em `utils.py`**: Parser de expression strings que tokeniza e valida a sintaxe, resolvendo placeholders (`:nome`) para os valores passados via kwargs.
+
+### Exemplos de migração
+
+```python
+# Antes (v1.2.x)
+user = User.find({"id": 1})
+users = User().and_where("role", "admin").index("role-index").fetch(True)
+
+# Depois (v1.3.0)
+user = User.get_item({"id": 1})
+users = User().find("role = :r", r="admin").index("role-index").fetch(True)
+```
+
 ## [1.2.0] - 2026-04-11
 
 ### Added
@@ -26,7 +49,7 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 | Método | Retorno em caso de erro |
 |--------|------------------------|
-| `find()` | `None` |
+| `get_item()` | `None` |
 | `create()` | `None` |
 | `delete()` | `False` |
 | `find_or_fail()` | `None` |

@@ -38,9 +38,9 @@ class TestTransactWrite:
             get_user.prepare_delete({"id": 1}),
         ])
 
-        assert get_user.find({"id": 1}) is None
-        assert get_user.find({"id": 2}).first_name == "Jane"
-        assert get_order.find({"id": 100}).total == 50
+        assert get_user.get_item({"id": 1}) is None
+        assert get_user.get_item({"id": 2}).first_name == "Jane"
+        assert get_order.get_item({"id": 100}).total == 50
 
     def test_transact_write_with_update(self, get_user, create_table, aws_mock):
         get_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
@@ -49,7 +49,7 @@ class TestTransactWrite:
             get_user.prepare_update({"id": 1}, {"first_name": "Jane"}),
         ])
 
-        user = get_user.find({"id": 1})
+        user = get_user.get_item({"id": 1})
         assert user.first_name == "Jane"
 
 

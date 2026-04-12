@@ -266,7 +266,7 @@ class TestAutoIdValidation:
 
 class TestAutoIdDisabled:
     def test_no_auto_id_by_default(self, get_user, create_table, aws_mock, save_records):
-        user = get_user.find({"id": 1})
+        user = get_user.get_item({"id": 1})
         assert user is not None
         assert user.id == 1
 
