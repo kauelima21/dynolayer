@@ -106,9 +106,10 @@ class User(DynoLayer):
             required_fields=["email", "name"],        # Campos obrigatórios
             fillable=["id", "email", "name", "role"], # Campos permitidos para mass assignment
             timestamps=True,                          # Gerenciar created_at/updated_at
-            partition_key="id",                       # Partition key da tabela
         )
 ```
+
+> **Nota**: O `partition_key` tem default `"id"`. Se a partition key da sua tabela é `"id"`, não precisa declarar. Para tabelas com partition key diferente, passe explicitamente: `partition_key="user_id"`.
 
 ### Parâmetros do Model
 
@@ -120,7 +121,7 @@ class User(DynoLayer):
 - **auto_id**: Estratégia de geração automática de ID (`"uuid4"`, `"uuid1"`, `"uuid7"`, `"numeric"` ou `None`)
 - **auto_id_length**: Tamanho do UUID truncado (16-32). Apenas para estratégias UUID
 - **auto_id_table**: Nome da tabela de sequências para IDs numéricos (padrão: `"dynolayer_sequences"`)
-- **partition_key**: Nome da partition key da tabela (obrigatório)
+- **partition_key**: Nome da partition key da tabela (padrão: `"id"`)
 - **sort_key**: Nome da sort key da tabela (opcional, apenas se a tabela tiver sort key)
 
 ## Uso Básico
