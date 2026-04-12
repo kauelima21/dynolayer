@@ -785,6 +785,80 @@ del user["role"]
 
 Para código defensivo ou quando os nomes dos campos vêm de input externo, prefira sempre a sintaxe de dicionário.
 
+## Modo Silencioso (raise_on_error)
+
+Por padrão, o DynoLayer lança exceções quando uma operação falha. Com o modo silencioso, as exceções são suprimidas e os métodos retornam indicadores de falha. O erro fica acessível via `fail()`.
+
+### Ativando o modo silencioso
+
+Defina `raise_on_error = False` no seu model:
+
+```python
+class User(DynoLayer):
+    raise_on_error = False
+
+    def __init__(self):
+        super().__init__(
+            entity="users",
+            required_fields=["email", "name"],
+            fillable=["id", "email", "name", "role"],
+            partition_key="id",
+        )
+```
+
+### Retornos em modo silencioso
+
+Quando `raise_on_error = False`, cada método retorna um valor indicando falha em vez de lançar exceção:
+
+| Método | Retorno em caso de erro |
+|--------|------------------------|
+| `get_item()` | `None` |
+| `create()` | `None` |
+| `delete()` | `False` |
+| `find_or_fail()` | `None` |
+| `batch_create()` | `[]` |
+| `batch_find()` | `Collection([])` |
+| `batch_destroy()` | `False` |
+| `save()` | `False` |
+| `destroy()` | `False` |
+| `get()` | `Collection([])` |
+| `count()` | `0` |
+
+### Acessando o erro com fail()
+
+O método `fail()` retorna a última exceção capturada (`DynoLayerException` ou subclasse), ou `None` se não houver erro. Funciona tanto na classe quanto na instância:
+
+```python
+# Usando como class method
+user = User.get_item({})
+if user is None:
+    error = User.fail()
+    print(f"Erro: {error}")  # Ex: ValidationException
+
+# Usando como instance method
+user = User()
+user.email = "invalid"
+result = user.save()
+if result is False:
+    error = user.fail()
+    print(f"Erro: {error}")
+```
+
+> **Nota**: O `fail()` é resetado automaticamente a cada nova operação. Consulte-o logo após a operação que deseja verificar.
+
+### Quando usar
+
+O modo silencioso é útil quando você quer tratar erros sem try/except, por exemplo em pipelines de processamento em lote onde uma falha individual não deve interromper o fluxo:
+
+```python
+for data in batch:
+    result = User.create(data)
+    if result is None:
+        logger.warning(f"Falha ao criar usuário: {User.fail()}")
+        continue
+    process(result)
+```
+
 ## Boas Práticas
 
 ### Use índices nas suas queries

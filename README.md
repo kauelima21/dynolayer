@@ -18,6 +18,7 @@ Uma biblioteca Python para DynamoDB que traz a elegância do Eloquent ORM (Larav
 - **Configuração Centralizada**: API de configuração para credenciais AWS, timestamps e retry
 - **Acesso via Dicionário**: `item["key"]` para acessar campos sem colisão com métodos internos
 - **Type Safety**: Conversão automática de tipos e resolução inteligente de key conditions
+- **Modo Silencioso**: `raise_on_error = False` suprime exceções e expõe erros via `fail()`
 
 ## Instalação
 
@@ -427,6 +428,21 @@ count = User().get_count()
 | `prepare_delete(key)` | Preparar operação Delete para transação |
 | `prepare_update(key, data)` | Preparar operação Update para transação |
 
+### Atributos de Classe
+
+| Atributo | Padrão | Descrição |
+|----------|--------|-----------|
+| `raise_on_error` | `True` | Quando `False`, suprime exceções e retorna indicadores de falha |
+
+### Método fail()
+
+| Acesso | Descrição |
+|--------|-----------|
+| `Model.fail()` | Retorna a última exceção capturada em operações de classe |
+| `instance.fail()` | Retorna a última exceção capturada em operações de instância |
+
+> Retorna `DynoLayerException` (ou subclasse) ou `None` se não houver erro. Resetado a cada nova operação.
+
 ### Métodos do Query Builder
 
 | Método | Descrição |
@@ -483,7 +499,7 @@ count = User().get_count()
 - [Getting Started](docs/getting-started.md) - Instalação e uso básico
 - [Query Builder](docs/query-builder.md) - Guia completo de queries
 - [Collections](docs/collections.md) - Trabalhando com resultados
-- [Advanced Features](docs/advanced.md) - Configuração, paginação, timestamps e mais
+- [Advanced Features](docs/advanced.md) - Configuração, paginação, timestamps, modo silencioso e mais
 
 ## Licença
 
