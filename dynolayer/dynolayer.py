@@ -843,9 +843,9 @@ class DynoLayer(CrudMixin):
             required = list(set(required + custom_data))
 
         for field in required:
-            if field not in self._data:
+            if (self._data.get(field) is None) or (hasattr(self._data.get(field), '__len__') and len(self._data.get(field)) == 0):
                 raise ValidationException(
-                    f"Field '{field}' is required but missing.",
+                    f"Field '{field}' is required but missing or empty.",
                     field=field,
                     required_fields=required
                 )

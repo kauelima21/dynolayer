@@ -4,6 +4,12 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.2] - 2026-04-13
+
+### Fixed
+
+- **Required fields**: Valida valores "falsy" para os campos descritos em `required_fields`.
+
 ## [1.3.1] - 2026-04-12
 
 ### Changed
