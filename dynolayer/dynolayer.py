@@ -214,8 +214,8 @@ class DynoLayer(CrudMixin):
                 if key in instance.fillable():
                     instance._data[key] = value
 
-            instance.__apply_auto_id()
             instance.__validate_required_fields()
+            instance.__apply_auto_id()
 
             if instance._timestamps:
                 instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
@@ -238,21 +238,6 @@ class DynoLayer(CrudMixin):
             ref_instance = cls()
             instances = []
 
-            # Pre-generate numeric IDs in a single atomic call
-            numeric_ids = None
-            if ref_instance._auto_id == "numeric":
-                items_needing_id = []
-                pk_field = ref_instance._partition_keys[0]
-                for data in items:
-                    if pk_field not in data or data.get(pk_field) is None:
-                        items_needing_id.append(True)
-                    else:
-                        items_needing_id.append(False)
-                count = sum(items_needing_id)
-                if count > 0:
-                    numeric_ids = ref_instance.__generate_numeric_id_batch(count)
-
-            numeric_id_index = 0
             for data in items:
                 instance = cls()
 
@@ -260,6 +245,23 @@ class DynoLayer(CrudMixin):
                     if key in instance.fillable():
                         instance._data[key] = value
 
+                instance.__validate_required_fields()
+                instances.append(instance)
+
+            # Pre-generate numeric IDs in a single atomic call
+            numeric_ids = None
+            if ref_instance._auto_id == "numeric":
+                pk_field = ref_instance._partition_keys[0]
+                items_needing_id = [
+                    pk_field not in inst._data or inst._data.get(pk_field) is None
+                    for inst in instances
+                ]
+                count = sum(items_needing_id)
+                if count > 0:
+                    numeric_ids = ref_instance.__generate_numeric_id_batch(count)
+
+            numeric_id_index = 0
+            for instance in instances:
                 if numeric_ids is not None:
                     pk_field = instance._partition_keys[0]
                     if pk_field not in instance._data or instance._data.get(pk_field) is None:
@@ -268,13 +270,9 @@ class DynoLayer(CrudMixin):
                 else:
                     instance.__apply_auto_id()
 
-                instance.__validate_required_fields()
-
                 if instance._timestamps:
                     instance._data["created_at"] = instance._get_current_timestamp(instance._timestamp_format)
                     instance._data["updated_at"] = instance._get_current_timestamp(instance._timestamp_format)
-
-                instances.append(instance)
 
             safe_items = [inst.__safe() for inst in instances]
             cls()._batch_put(safe_items)
@@ -436,6 +434,7 @@ class DynoLayer(CrudMixin):
     def save(self, condition=None) -> bool:
         self._last_error = None
         try:
+            self.__validate_required_fields()
             self.__apply_auto_id()
             self.__validate_required_fields(self._partition_keys)
             keys = {key: self.data()[key] for key in self._partition_keys}

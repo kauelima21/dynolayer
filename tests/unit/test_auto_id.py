@@ -3,7 +3,7 @@ import re
 import boto3
 import pytest
 from dynolayer.dynolayer import DynoLayer
-from dynolayer.exceptions import InvalidArgumentException, AutoIdException
+from dynolayer.exceptions import InvalidArgumentException, AutoIdException, ValidationException
 
 
 # --- Fixtures ---
@@ -228,6 +228,37 @@ class TestAutoIdNumeric:
         assert orders[0].id == 999
         assert orders[1].id == 1
         assert orders[2].id == 2
+
+    def test_create_validation_error_does_not_increment_counter(self, get_order_numeric, create_table_num_pk, create_sequences_table, aws_mock):
+        with pytest.raises(ValidationException):
+            get_order_numeric.create({"status": "pending"})  # missing required "total"
+
+        order = get_order_numeric.create({"total": 100, "status": "pending"})
+        assert order.id == 1
+
+    def test_save_validation_error_does_not_increment_counter(self, get_order_numeric, create_table_num_pk, create_sequences_table, aws_mock):
+        order_bad = get_order_numeric()
+        order_bad.status = "pending"
+        with pytest.raises(ValidationException):
+            order_bad.save()  # missing required "total"
+
+        order = get_order_numeric()
+        order.total = 100
+        order.status = "pending"
+        order.save()
+        assert order.id == 1
+
+    def test_batch_create_validation_error_does_not_increment_counter(self, get_order_numeric, create_table_num_pk, create_sequences_table, aws_mock):
+        with pytest.raises(ValidationException):
+            get_order_numeric.batch_create([
+                {"total": 100, "status": "pending"},
+                {"status": "pending"},  # missing required "total"
+            ])
+
+        orders = get_order_numeric.batch_create([
+            {"total": 200, "status": "shipped"},
+        ])
+        assert orders[0].id == 1
 
 
 # --- Validation Tests ---

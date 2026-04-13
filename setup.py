@@ -5,7 +5,7 @@ with open('README.md', 'r') as file:
 
 setup(
     name='dynolayer',
-    version='1.3.2',
+    version='1.3.3',
     license='MIT License',
     packages=['dynolayer'],
     install_requires=[],
