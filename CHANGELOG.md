@@ -4,6 +4,12 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.3] - 2026-04-13
+
+### Fixed
+
+- **Auto ID numérico**: Corrigida a ordem de execução nos métodos `create()`, `save()` e `batch_create()` para validar campos obrigatórios **antes** de incrementar o contador na tabela de controle. Anteriormente, se a validação falhasse (ex: campo requerido faltante), o ID auto incremente já havia sido consumido sem que o registro fosse salvo.
+
 ## [1.3.2] - 2026-04-13
 
 ### Fixed
