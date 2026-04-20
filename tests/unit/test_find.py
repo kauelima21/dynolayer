@@ -4,7 +4,7 @@ from dynolayer.utils import Collection
 
 class TestRetrieveRecords:
     def test_with_all_method(self, get_user, create_table, aws_mock, save_records):
-        response = get_user().all().get(return_all=True)
+        response = get_user().all().get(all=True, paginate=True)
         assert isinstance(response, Collection)
         assert response.count() == 20
 
@@ -24,7 +24,7 @@ class TestQueryBuilder:
             .and_where("stars", "<", 5)
             .and_where("role", "moderator")
             .index("role-index")
-            .fetch()
+            .fetch(all=True)
         )
 
         assert isinstance(result, Collection)
@@ -48,7 +48,7 @@ class TestQueryBuilder:
             .and_where("stars", "<=", 3)
             .or_where("email", "jack@mail.com")
             .force_scan()
-            .get()
+            .get(all=True)
         )
 
         assert isinstance(result, Collection)
@@ -71,7 +71,7 @@ class TestQueryBuilder:
             get_user().where("role", "admin")
             .where_between("created_at", ts_yesterday, ts_today)
             .index("role-index")
-            .fetch()
+            .fetch(all=True)
         )
 
         assert isinstance(result, Collection)
@@ -83,13 +83,13 @@ class TestQueryBuilder:
             get_user().where("role", "admin")
             .where_in("stars", [2, 3, 5])
             .index("role-index")
-            .fetch()
+            .fetch(all=True)
         )
 
         assert isinstance(result, Collection)
 
     def test_with_where_not_method(self, get_user, create_table, aws_mock, save_records):
-        result = get_user().where_not("stars", "in", [3, 4, 5]).get()
+        result = get_user().where_not("stars", "in", [3, 4, 5]).get(all=True)
         assert isinstance(result, Collection)
 
     def test_with_begins_with(self, get_user, create_table, aws_mock, save_records):
@@ -104,7 +104,7 @@ class TestQueryBuilder:
             get_user().where("role", "admin")
             .and_where("email", "begins_with", "potter")
             .index("role-email-index")
-            .fetch()
+            .fetch(all=True)
         )
 
         assert isinstance(result, Collection)

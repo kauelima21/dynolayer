@@ -18,12 +18,15 @@ def reset_dynolayer_cache():
 @pytest.fixture
 def get_user():
     class User(DynoLayer):
+        raise_on_error = True
+
         def __init__(self) -> None:
             super().__init__(
                 entity="users",
                 required_fields=["first_name", "email", "role"],
                 fillable=["id", "first_name", "last_name", "email", "role", "stars", "stats", "phones"],
                 timestamps=True,
+                timestamp_format="numeric",
                 partition_key="id",
             )
 
@@ -41,6 +44,7 @@ def get_silent_user():
                 required_fields=["first_name", "email", "role"],
                 fillable=["id", "first_name", "last_name", "email", "role", "stars", "stats", "phones"],
                 timestamps=True,
+                timestamp_format="numeric",
                 partition_key="id",
             )
 

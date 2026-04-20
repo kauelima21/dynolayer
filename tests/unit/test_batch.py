@@ -79,6 +79,6 @@ class TestBatchDestroy:
 
         get_user.batch_destroy([{"id": 1}, {"id": 2}])
 
-        remaining = get_user.all().get(return_all=True)
+        remaining = get_user.all().get(all=True, paginate=True)
         assert remaining.count() == 1
         assert remaining.first().id == 3

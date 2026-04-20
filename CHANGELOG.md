@@ -4,6 +4,45 @@ Todas as mudanças relevantes do DynoLayer serão documentadas neste arquivo.
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [2.0.0] - 2026-04-20
+
+### Breaking Changes
+
+- **`raise_on_error` default alterado para `False`**: A biblioteca agora opera em modo silencioso por padrão. Exceções `DynoLayerException` são capturadas e armazenadas em `_last_error` (acessível via `.fail()`) em vez de propagadas. Para manter o comportamento antigo, defina `raise_on_error = True` na sua subclasse.
+- **`timestamp_format` default alterado para `"iso"`**: Novos registros gravam `created_at`/`updated_at` como strings ISO 8601 por padrão. Para manter timestamps numéricos (epoch int), declare `timestamp_format="numeric"` no `__init__` do model ou use `DynoLayer.configure(timestamp_format="numeric")` globalmente.
+- **`get()` e `fetch()` retornam model único por padrão**: Sem argumentos, retornam uma instância (primeiro resultado) ou `None`. Para obter uma `Collection`, passe `all=True`.
+- **Parâmetro `return_all` renomeado para `paginate`**: Em `get()` e `fetch()`, o parâmetro que percorre todas as páginas (seguindo `LastEvaluatedKey`) agora se chama `paginate`. Combinado com `all=True` devolve a `Collection` completa atravessando todas as páginas.
+- **`find(expression=...)` renomeado para `find(terms=...)`**: Como o parâmetro é posicional-only (`/`), apenas chamadas que usavam o nome explicitamente (raro) precisam ajuste.
+
+### Changed
+
+- **Anotação de retorno de `get()`/`fetch()`**: Agora declarada como `Collection | DynoLayer | None` refletindo os três retornos possíveis.
+
+### Exemplos de migração
+
+```python
+# Antes (v1.x)
+users = User().all().get(return_all=True)       # Collection com tudo
+result = User().where("role", "admin").fetch()  # Collection
+
+# Depois (v2.0)
+users = User().all().get(all=True, paginate=True)  # Collection, todas páginas
+result = User().where("role", "admin").fetch(all=True)  # Collection (1 página)
+user = User().where("id", 1).fetch()            # Model único ou None
+```
+
+```python
+# Manter modo estrito (v1.x default)
+class User(DynoLayer):
+    raise_on_error = True
+    ...
+
+# Manter timestamps numéricos (v1.x default)
+class User(DynoLayer):
+    def __init__(self):
+        super().__init__(..., timestamp_format="numeric")
+```
+
 ## [1.3.3] - 2026-04-13
 
 ### Fixed

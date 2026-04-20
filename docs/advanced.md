@@ -428,11 +428,11 @@ O DynamoDB retorna resultados em páginas (até 1MB por página). O DynoLayer of
 
 ### Paginação automática
 
-Use `return_all=True` para buscar todas as páginas automaticamente:
+Use `paginate=True` para percorrer todas as páginas automaticamente. Combine com `all=True` para obter a `Collection` completa:
 
 ```python
 # Buscar todos os registros de todas as páginas
-all_users = User.all().get(return_all=True)
+all_users = User.all().get(all=True, paginate=True)
 ```
 
 ### Paginação manual
@@ -454,8 +454,8 @@ last_evaluated_key = request.get('last_evaluated_key')
 if last_evaluated_key:
     query = query.offset(last_evaluated_key)
 
-# Executar query
-results = query.fetch()
+# Executar query (all=True → Collection, sem seguir páginas)
+results = query.fetch(all=True)
 
 # Dados de paginação
 results_count = user.get_count()
@@ -725,11 +725,11 @@ user = User.find({"id": 1}, attributes=["name", "email"])
 
 ### Streaming para tabelas grandes
 
-Use `stream()` em vez de `get(return_all=True)` para processar tabelas grandes sem carregar tudo em memória. Isso previne OOM em Lambda (128MB default):
+Use `stream()` em vez de `get(all=True, paginate=True)` para processar tabelas grandes sem carregar tudo em memória. Isso previne OOM em Lambda (128MB default):
 
 ```python
 # Ruim — carrega todos os registros em memória
-all_users = User.all().get(return_all=True)
+all_users = User.all().get(all=True, paginate=True)
 
 # Bom — processa um por um, página por página
 for user in User.all().stream():
@@ -787,15 +787,13 @@ Para código defensivo ou quando os nomes dos campos vêm de input externo, pref
 
 ## Modo Silencioso (raise_on_error)
 
-Por padrão, o DynoLayer lança exceções quando uma operação falha. Com o modo silencioso, as exceções são suprimidas e os métodos retornam indicadores de falha. O erro fica acessível via `fail()`.
+A partir da v2.0 o DynoLayer opera em modo silencioso por padrão (`raise_on_error = False`): as exceções são suprimidas e os métodos retornam indicadores de falha. O erro fica acessível via `fail()`. Para reativar o comportamento estrito (v1.x), defina `raise_on_error = True` no seu model.
 
-### Ativando o modo silencioso
-
-Defina `raise_on_error = False` no seu model:
+### Reativando exceções (comportamento v1.x)
 
 ```python
 class User(DynoLayer):
-    raise_on_error = False
+    raise_on_error = True
 
     def __init__(self):
         super().__init__(
@@ -808,7 +806,7 @@ class User(DynoLayer):
 
 ### Retornos em modo silencioso
 
-Quando `raise_on_error = False`, cada método retorna um valor indicando falha em vez de lançar exceção:
+Quando `raise_on_error = False` (default), cada método retorna um valor indicando falha em vez de lançar exceção:
 
 | Método | Retorno em caso de erro |
 |--------|------------------------|
@@ -886,7 +884,7 @@ Sempre limite os resultados ao que você precisa:
 users = User.where("role", "admin").limit(100).get()
 
 # Ruim — pode retornar milhões de registros
-users = User.where("role", "admin").get(return_all=True)
+users = User.where("role", "admin").get(all=True, paginate=True)
 ```
 
 ### Use projeção

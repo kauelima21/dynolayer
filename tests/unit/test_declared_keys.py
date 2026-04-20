@@ -25,6 +25,8 @@ def create_table_with_sort_key(aws_mock):
 @pytest.fixture
 def get_fast_user():
     class User(DynoLayer):
+        raise_on_error = True
+
         def __init__(self):
             super().__init__(
                 entity="users",
@@ -39,6 +41,8 @@ def get_fast_user():
 @pytest.fixture
 def get_event():
     class Event(DynoLayer):
+        raise_on_error = True
+
         def __init__(self):
             super().__init__(
                 entity="events",
@@ -125,13 +129,13 @@ class TestDeclaredPartitionKey:
 
     def test_index_query_lazy_loads_indexes(self, get_fast_user, create_table, aws_mock):
         get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
-        result = get_fast_user.where("role", "admin").index("role-index").get()
+        result = get_fast_user.where("role", "admin").index("role-index").get(all=True)
         assert isinstance(result, Collection)
         assert result.count() >= 1
 
     def test_all_scan_without_describe_table(self, get_fast_user, create_table, aws_mock):
         get_fast_user.create({"id": 1, "first_name": "John", "email": "john@mail.com", "role": "admin"})
-        result = get_fast_user.all().get(return_all=True)
+        result = get_fast_user.all().get(all=True, paginate=True)
         assert result.count() == 1
 
 

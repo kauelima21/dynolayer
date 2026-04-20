@@ -32,10 +32,22 @@ class TestTimestampNumeric:
 
 
 class TestTimestampIso:
-    def test_create_adds_iso_timestamps_via_configure(self, get_user, create_table, aws_mock):
+    def test_create_adds_iso_timestamps_via_configure(self, create_table, aws_mock):
         DynoLayer.configure(timestamp_format="iso")
 
-        user = get_user.create({
+        class ConfiguredUser(DynoLayer):
+            raise_on_error = True
+
+            def __init__(self):
+                super().__init__(
+                    entity="users",
+                    required_fields=["first_name", "email", "role"],
+                    fillable=["id", "first_name", "email", "role"],
+                    timestamps=True,
+                    partition_key="id",
+                )
+
+        user = ConfiguredUser.create({
             "id": 1,
             "first_name": "John",
             "email": "john@mail.com",
@@ -109,10 +121,22 @@ class TestTimestampIso:
 
 
 class TestTimestampTimezone:
-    def test_configure_timezone(self, get_user, create_table, aws_mock):
+    def test_configure_timezone(self, create_table, aws_mock):
         DynoLayer.configure(timestamp_timezone="UTC", timestamp_format="iso")
 
-        user = get_user.create({
+        class ConfiguredUser(DynoLayer):
+            raise_on_error = True
+
+            def __init__(self):
+                super().__init__(
+                    entity="users",
+                    required_fields=["first_name", "email", "role"],
+                    fillable=["id", "first_name", "email", "role"],
+                    timestamps=True,
+                    partition_key="id",
+                )
+
+        user = ConfiguredUser.create({
             "id": 1,
             "first_name": "John",
             "email": "john@mail.com",

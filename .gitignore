@@ -9,3 +9,5 @@ tests/**/__pycache__
 dist
 dynolayer.egg-info
 build
+.neuralmemory
+.serena
