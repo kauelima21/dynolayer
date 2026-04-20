@@ -41,11 +41,11 @@ class _HybridFail:
 
 class DynoLayer(CrudMixin):
     _VALID_AUTO_ID_STRATEGIES = ("uuid4", "uuid1", "uuid7", "numeric")
-    raise_on_error = True
+    raise_on_error = False
     _class_last_error = None
 
     def __init__(self, entity="", required_fields=None, partition_key: str = "id", timestamps=True,
-                 fillable=None, timestamp_format: Literal["numeric", "iso"] = None,
+                 fillable=None, timestamp_format: Literal["numeric", "iso"] = "iso",
                  auto_id: Literal["uuid4", "uuid1", "uuid7", "numeric"] = None,
                  auto_id_length=None, auto_id_table=None, sort_key: str = None):
         if auto_id is not None:
@@ -177,12 +177,12 @@ class DynoLayer(CrudMixin):
             cls._class_last_error = e
             return None
 
-    def find(self, expression: str = None, /, **values) -> DynoLayer:
-        if expression is None:
+    def find(self, terms: str = None, /, **values) -> DynoLayer:
+        if terms is None:
             self._scan_all = True
             return self
 
-        parsed = parse_expression(expression, **values)
+        parsed = parse_expression(terms, **values)
         for connector, attribute, condition, value in parsed:
             self.__set_filter_expression(attribute, condition, value, connector)
 
@@ -521,7 +521,7 @@ class DynoLayer(CrudMixin):
         self._offset = last_evaluated_key
         return self
 
-    def get(self, return_all=False) -> Collection:
+    def get(self, all=False, paginate=False) -> Collection | DynoLayer | None:
         self._last_error = None
         try:
             if not self._scan_all and not self._filter_expression and not self._key_condition_expression:
@@ -544,13 +544,13 @@ class DynoLayer(CrudMixin):
             items = []
             if self._key_condition_expression and not self._force_scan and not self._scan_all:
                 key_condition = transform_params_in_query(self._key_condition_expression)
-                response = self._query(key_condition, filter_expression, self._index, self._limit, return_all, self._project_expression, self._offset)
+                response = self._query(key_condition, filter_expression, self._index, self._limit, paginate, self._project_expression, self._offset)
                 for row in response["Items"]:
                     model_instance = self.__class__()
                     model_instance._data = row.copy()
                     items.append(model_instance)
             else:
-                response = self._scan(filter_expression, self._limit, return_all, self._project_expression, self._offset)
+                response = self._scan(filter_expression, self._limit, paginate, self._project_expression, self._offset)
                 for row in response["Items"]:
                     model_instance = self.__class__()
                     model_instance._data = row.copy()
@@ -566,6 +566,9 @@ class DynoLayer(CrudMixin):
             self._last_evaluated_key = last_key
             self._get_count = count
 
+            if not all:
+                return Collection(items).first()
+
             return Collection(items)
         except DynoLayerException as e:
             if self.raise_on_error:
@@ -574,8 +577,8 @@ class DynoLayer(CrudMixin):
             self.__reset_query_builder()
             return Collection([])
 
-    def fetch(self, return_all=False) -> Collection:
-        return self.get(return_all)
+    def fetch(self, all=False, paginate=False) -> Collection | DynoLayer | None:
+        return self.get(all, paginate)
 
     def stream(self):
         self.__resolve_key_conditions()

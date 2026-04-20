@@ -90,6 +90,8 @@ def get_product_uuid4_truncated():
 @pytest.fixture
 def get_order_numeric():
     class Order(DynoLayer):
+        raise_on_error = True
+
         def __init__(self):
             super().__init__(
                 entity="orders",

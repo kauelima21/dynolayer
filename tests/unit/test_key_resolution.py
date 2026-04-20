@@ -8,13 +8,13 @@ class TestKeyConditionResolution:
             get_user.where("id", ">=", 1)
             .and_where("role", "admin")
             .index("role-index")
-            .get()
+            .get(all=True)
         )
 
         assert isinstance(result, Collection)
 
     def test_table_query_keeps_partition_key(self, get_user, create_table, aws_mock, save_records):
-        result = get_user.where("id", 1).get()
+        result = get_user.where("id", 1).get(all=True)
 
         assert isinstance(result, Collection)
 
@@ -23,7 +23,7 @@ class TestKeyConditionResolution:
             get_user.where("role", "admin")
             .and_where("email", "begins_with", "j")
             .index("role-email-index")
-            .get()
+            .get(all=True)
         )
 
         assert isinstance(result, Collection)

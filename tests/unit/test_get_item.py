@@ -110,7 +110,7 @@ class TestFindInstanceMethod:
         assert result.count() >= 1
 
     def test_find_scan_with_filter(self, get_user, create_table, aws_mock, save_records):
-        result = get_user().find("stars = :s", s=3).force_scan().get(return_all=True)
+        result = get_user().find("stars = :s", s=3).force_scan().get(all=True, paginate=True)
         assert isinstance(result, Collection)
 
     def test_find_with_chaining(self, get_user, create_table, aws_mock, save_records):
@@ -119,7 +119,7 @@ class TestFindInstanceMethod:
             .find("role = :r", r="admin")
             .index("role-index")
             .limit(5)
-            .fetch()
+            .fetch(all=True)
         )
         assert isinstance(result, Collection)
         assert result.count() <= 5

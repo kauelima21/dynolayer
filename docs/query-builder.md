@@ -261,11 +261,11 @@ users = User.where("role", "admin").fetch()
 
 ### Pagination
 
-By default, DynamoDB returns up to 1MB of data. Use `return_all=True` to automatically fetch all pages:
+By default, DynamoDB returns up to 1MB of data. Use `paginate=True` to automatically fetch all pages. Combine with `all=True` to get the full `Collection`:
 
 ```python
 # Get all results across all pages
-all_users = User.where("role", "admin").get(return_all=True)
+all_users = User.where("role", "admin").get(all=True, paginate=True)
 ```
 
 See [Advanced Features](advanced.md#pagination) for manual pagination control.
@@ -321,5 +321,5 @@ print(f"Found {active_admins.count()} active admins")
 | `limit(count)` | Limit results |
 | `attributes_to_get(attrs)` | Select specific attributes |
 | `force_scan()` | Force scan instead of query |
-| `get(return_all=False)` | Execute and return Collection |
-| `fetch(return_all=False)` | Alias for get() |
+| `get(all=False, paginate=False)` | Execute query (single model by default; `all=True` → Collection; `paginate=True` → follow all pages) |
+| `fetch(all=False, paginate=False)` | Alias for `get()` |

@@ -8,7 +8,7 @@ class TestPaginationMetadata:
     def test_last_evaluated_key_is_set_with_limit(self, get_user, create_table, aws_mock, save_records):
         """Test that last_evaluated_key is set when results are limited"""
         query = get_user().all().limit(5)
-        result = query.get()
+        result = query.get(all=True)
 
         assert isinstance(result, Collection)
         assert query.last_evaluated_key() is not None
@@ -17,7 +17,7 @@ class TestPaginationMetadata:
     def test_last_evaluated_key_is_none_when_all_returned(self, get_user, create_table, aws_mock, save_records):
         """Test that last_evaluated_key is None when all results are returned"""
         query = get_user().all()
-        result = query.get(return_all=True)
+        result = query.get(all=True, paginate=True)
 
         assert isinstance(result, Collection)
         assert query.last_evaluated_key() is None
@@ -25,16 +25,16 @@ class TestPaginationMetadata:
     def test_get_count_reflects_returned_items(self, get_user, create_table, aws_mock, save_records):
         """Test that get_count reflects the number of items returned in the current page"""
         query = get_user().all().limit(10)
-        result = query.get()
+        result = query.get(all=True)
 
         assert isinstance(result, Collection)
         assert query.get_count() == 10
         assert result.count() == 10
 
     def test_get_count_with_return_all(self, get_user, create_table, aws_mock, save_records):
-        """Test that get_count reflects all items when return_all=True"""
+        """Test that get_count reflects all items when paginate=True"""
         query = get_user().all()
-        result = query.get(return_all=True)
+        result = query.get(all=True, paginate=True)
 
         assert isinstance(result, Collection)
         assert query.get_count() == 20
@@ -48,7 +48,7 @@ class TestOffsetMethod:
         """Test that offset() returns the next page of results"""
         # Get first page
         query1 = get_user().all().limit(5)
-        first_page = query1.get()
+        first_page = query1.get(all=True)
         first_page_ids = first_page.pluck("id")
         last_key = query1.last_evaluated_key()
 
@@ -57,7 +57,7 @@ class TestOffsetMethod:
 
         # Get second page using offset
         query2 = get_user().all().limit(5).offset(last_key)
-        second_page = query2.get()
+        second_page = query2.get(all=True)
         second_page_ids = second_page.pluck("id")
 
         assert len(second_page_ids) == 5
@@ -72,7 +72,7 @@ class TestOffsetMethod:
             user1.where("role", "admin")
             .index("role-index")
             .limit(2)
-            .get()
+            .get(all=True)
         )
 
         if user1.last_evaluated_key() is not None:
@@ -83,7 +83,7 @@ class TestOffsetMethod:
                 .index("role-index")
                 .limit(2)
                 .offset(user1.last_evaluated_key())
-                .get()
+                .get(all=True)
             )
 
             assert isinstance(second_page, Collection)
@@ -146,7 +146,7 @@ class TestManualPaginationWorkflow:
         query = get_user().all().limit(limit)
 
         # Execute query
-        results = query.fetch()
+        results = query.fetch(all=True)
 
         # Get result count and next page token
         results_count = query.get_count()
@@ -183,7 +183,7 @@ class TestManualPaginationWorkflow:
             if last_evaluated_key:
                 query = query.offset(last_evaluated_key)
 
-            results = query.fetch()
+            results = query.fetch(all=True)
             all_ids.extend(results.pluck("id"))
 
             last_evaluated_key = query.last_evaluated_key()
@@ -199,11 +199,11 @@ class TestManualPaginationWorkflow:
 
 
 class TestAutomaticPagination:
-    """Test automatic pagination with return_all=True"""
+    """Test automatic pagination with paginate=True"""
 
     def test_automatic_pagination_with_all(self, get_user, create_table, aws_mock, save_records):
-        """Test automatic pagination using all().get(return_all=True)"""
-        all_users = get_user().all().get(return_all=True)
+        """Test automatic pagination using all().get(all=True, paginate=True)"""
+        all_users = get_user().all().get(all=True, paginate=True)
 
         assert isinstance(all_users, Collection)
         assert all_users.count() == 20
@@ -225,7 +225,7 @@ class TestAutomaticPagination:
             get_user()
             .where("role", "admin")
             .index("role-index")
-            .get(return_all=True)
+            .get(all=True, paginate=True)
         )
 
         assert isinstance(all_admins, Collection)
