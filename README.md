@@ -111,8 +111,8 @@ class User(DynoLayer):
 # Criar usando classmethod
 user = User.create({
     "id": 1,
-    "email": "robson@example.com",
-    "name": "Robson Leite",
+    "email": "john@example.com",
+    "name": "John Doe",
     "role": "admin",
 })
 
@@ -131,13 +131,13 @@ Condições podem ser passadas para proteger escritas concorrentes.
 # Insert
 user = User()
 user.id = 1
-user.email = "robson@example.com"
-user.name = "Robson Leite"
+user.email = "john@example.com"
+user.name = "John Doe"
 user.save()
 
 # Update
 user = User.get_item({"id": 1})
-user.name = "Robson V. Leite"
+user.name = "John Doe"
 user.save()
 
 # Save com condição
